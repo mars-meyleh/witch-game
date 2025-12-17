@@ -1,0 +1,4 @@
+:root{--bg:#FDEFF7;--accent:#F8C8E0;--tile:#F6E7F2;--wall:#DAB6D8;--player:#FFB3C6;--muted:#F7F3F8}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:monospace;background:var(--bg);display:flex;align-items:center;justify-content:center}
+canvas#game{image-rendering:pixelated;width:640px;height:480px;border:8px solid var(--accent);background:var(--muted);display:block}
