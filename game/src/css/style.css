@@ -1,4 +1,23 @@
-:root{--bg:#FDEFF7;--accent:#F8C8E0;--tile:#F6E7F2;--wall:#DAB6D8;--player:#FFB3C6;--muted:#F7F3F8}
+:root{
+	--bg:#FDEFF7;
+	--accent:#F8C8E0;
+	--tile:#F6E7F2;
+	--wall:#DAB6D8;
+	--player:#FFB3C6;
+	--muted:#F7F3F8;
+	--p1:#7F55B1;
+	--p2:#9B7EBD;
+	--p3:#F49BAB;
+	--p4:#FFE1E0;
+	--p5:#F7CFD8;
+	--p6:#F4F8D3;
+	--p7:#A6D6D6;
+	--p8:#8E7DBE;
+}
+
 *{box-sizing:border-box}
-html,body{height:100%;margin:0;font-family:monospace;background:var(--bg);display:flex;align-items:center;justify-content:center}
-canvas#game{image-rendering:pixelated;width:640px;height:480px;border:8px solid var(--accent);background:var(--muted);display:block}
+
+html,body{height:100%;margin:0;font-family:monospace;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--p2),var(--p4))}
+
+/* canvas scaled to preserve pixel art; border uses palette */
+canvas#game{image-rendering:pixelated;width:640px;height:480px;border:10px solid var(--p1);background:linear-gradient(180deg,var(--p6),var(--p5));display:block}
