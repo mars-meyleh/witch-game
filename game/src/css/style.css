@@ -17,7 +17,15 @@
 
 *{box-sizing:border-box}
 
-html,body{height:100%;margin:0;font-family:monospace;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--p2),var(--p4))}
+html,body{height:100%;margin:0;font-family:monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--p2),var(--p4))}
 
 /* canvas scaled to preserve pixel art; border uses palette */
 canvas#game{image-rendering:pixelated;width:640px;height:480px;border:10px solid var(--p1);background:linear-gradient(180deg,var(--p6),var(--p5));display:block}
+
+/* HUD styles */
+.hud{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;align-items:center}
+.hud-row{display:flex;align-items:center;gap:6px}
+.hud-icon{width:32px;height:32px;image-rendering:pixelated;border-radius:3px}
+
+/* place HUD above canvas */
+/* canvas and HUD centered vertically */

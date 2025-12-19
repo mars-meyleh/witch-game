@@ -13,8 +13,20 @@ const player = new Player(2, 2, WitchSprite);
 let sprites = { witch: WitchSprite, grass: GrassTile, stone: StoneTile };
 
 let lastMove = 0;
+// player stats (HP uses hpPerIcon = 50 by default in HUD)
+let playerHP = 150, playerMaxHP = 150;
+let playerMana = 40, playerMaxMana = 100;
+// instantiate HUD (outside of canvas)
+const hud = (window.HUD) ? new window.HUD({ hpPerIcon: 50, manaPerIcon: 25 }) : null;
+if (hud) { hud.setHP(playerHP, playerMaxHP); hud.setMana(playerMana, playerMaxMana); }
 function update() {
   const now = Date.now();
+  // test keys: O = enemy attack (50), P = boss attack (100)
+  if(!window._testKeyCooldown) window._testKeyCooldown = 0;
+  if(now - window._testKeyCooldown > 180){
+    if(Input.isDown('o')){ playerHP = Math.max(0, playerHP - 50); window._testKeyCooldown = now; }
+    else if(Input.isDown('p')){ playerHP = Math.max(0, playerHP - 100); window._testKeyCooldown = now; }
+  }
   // simple input rate limit so holding key doesn't spam movement too fast
   if (now - lastMove > 120) {
     if (Input.isDown('arrowleft') || Input.isDown('a')) { player.move(-1, 0, map); lastMove = now; }
@@ -39,6 +51,8 @@ function draw() {
   }
   // draw player using SpriteAPI; scale is 1 (sprite pixels = canvas pixels), tile size is TILE
   player.draw(ctx, player.x * TILE, player.y * TILE, TILE, spriteAPI);
+  // update DOM HUD
+  if (hud) { hud.setHP(playerHP, playerMaxHP); hud.setMana(playerMana, playerMaxMana); }
 }
 
 function loop() { update(); draw(); requestAnimationFrame(loop); }
