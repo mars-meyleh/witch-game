@@ -17,10 +17,10 @@ function update() {
   const now = Date.now();
   // simple input rate limit so holding key doesn't spam movement too fast
   if (now - lastMove > 120) {
-    if (Input.isDown('ArrowLeft')) { player.move(-1, 0, map); lastMove = now; }
-    else if (Input.isDown('ArrowRight')) { player.move(1, 0, map); lastMove = now; }
-    else if (Input.isDown('ArrowUp')) { player.move(0, -1, map); lastMove = now; }
-    else if (Input.isDown('ArrowDown')) { player.move(0, 1, map); lastMove = now; }
+    if (Input.isDown('arrowleft') || Input.isDown('a')) { player.move(-1, 0, map); lastMove = now; }
+    else if (Input.isDown('arrowright') || Input.isDown('d')) { player.move(1, 0, map); lastMove = now; }
+    else if (Input.isDown('arrowup') || Input.isDown('w')) { player.move(0, -1, map); lastMove = now; }
+    else if (Input.isDown('arrowdown') || Input.isDown('s')) { player.move(0, 1, map); lastMove = now; }
   }
 }
 
