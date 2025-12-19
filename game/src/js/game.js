@@ -27,9 +27,14 @@ function update() {
 function draw() {
   for (let y = 0; y < HEIGHT; y++) {
     for (let x = 0; x < WIDTH; x++) {
-      if (map[y][x] === 1) { ctx.fillStyle = '#DAB6D8'; }
-      else { ctx.fillStyle = '#F6E7F2'; }
-      ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+      const tx = x * TILE, ty = y * TILE;
+      if (map[y][x] === 1) {
+        if (window.wallSprite) spriteAPI.draw(window.wallSprite, tx, ty, false);
+        else { ctx.fillStyle = '#DAB6D8'; ctx.fillRect(tx, ty, TILE, TILE); }
+      } else {
+        if (window.floorSprite) spriteAPI.draw(window.floorSprite, tx, ty, false);
+        else { ctx.fillStyle = '#F6E7F2'; ctx.fillRect(tx, ty, TILE, TILE); }
+      }
     }
   }
   // draw player using SpriteAPI; scale is 1 (sprite pixels = canvas pixels), tile size is TILE
