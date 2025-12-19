@@ -334,14 +334,26 @@ class SpriteAPI {
   }
 
   draw(sprite, x, y, flip = false) {
-    const palette = Palette[sprite.palette] || {};
     const px = sprite.pixels;
     const size = sprite.size || 16;
+
+    // allow sprite.palette to be a string (single palette) or an array of palette names
+    let paletteList = [];
+    if (Array.isArray(sprite.palette)) {
+      paletteList = sprite.palette.map(name => Palette[name] || {});
+    } else {
+      paletteList = [Palette[sprite.palette] || {}];
+    }
 
     for (let y0 = 0; y0 < size; y0++) {
       for (let x0 = 0; x0 < size; x0++) {
         const sx = flip ? (size - 1 - x0) : x0;
-        const color = palette[px[y0][sx]];
+        const idx = px[y0][sx];
+        let color = null;
+        for (let pi = 0; pi < paletteList.length; pi++) {
+          const pmap = paletteList[pi];
+          if (pmap && (idx in pmap) && pmap[idx]) { color = pmap[idx]; break; }
+        }
         if (!color) continue;
         this.ctx.fillStyle = color;
         this.ctx.fillRect(
@@ -367,3 +379,31 @@ if (typeof floorSprite !== 'undefined') window.floorSprite = floorSprite;
 // expose UI icons
 if (typeof HeartSprite !== 'undefined') window.HeartSprite = HeartSprite;
 if (typeof StarSprite !== 'undefined') window.StarSprite = StarSprite;
+if (typeof ManaPotionSprite !== 'undefined') window.ManaPotionSprite = ManaPotionSprite;
+if (typeof HealthPotionSprite !== 'undefined') window.HealthPotionSprite = HealthPotionSprite;
+
+// placeholder key sprite (simple indexed 16x16 using ui palette)
+const KeySprite = {
+  id: 'item.key',
+  size: 16,
+  palette: 'ui',
+  pixels: [
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,3,3,3,3,0,0,0,0,0,0],
+    [0,0,0,0,0,3,3,2,2,3,3,0,0,0,0,0],
+    [0,0,0,0,3,3,2,1,1,2,3,3,0,0,0,0],
+    [0,0,0,3,3,2,1,1,1,1,2,3,3,0,0,0],
+    [0,0,3,3,2,1,1,1,1,1,1,2,3,3,0,0],
+    [0,3,3,2,1,1,1,1,1,1,1,1,2,3,3,0],
+    [0,0,0,3,3,2,1,1,1,1,2,3,3,0,0,0],
+    [0,0,0,0,0,3,3,2,2,3,3,0,0,0,0,0],
+    [0,0,0,0,0,0,3,3,3,3,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+  ]
+};
+window.KeySprite = KeySprite;

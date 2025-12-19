@@ -19,13 +19,25 @@ let playerMana = 40, playerMaxMana = 100;
 // instantiate HUD (outside of canvas)
 const hud = (window.HUD) ? new window.HUD({ hpPerIcon: 50, manaPerIcon: 25 }) : null;
 if (hud) { hud.setHP(playerHP, playerMaxHP); hud.setMana(playerMana, playerMaxMana); }
+// inventory state (health potions, mana potions, keys)
+let inventory = { healthPotion: 2, manaPotion: 2, keys: 0 };
+if (hud) hud.setInventory(inventory);
 function update() {
   const now = Date.now();
   // test keys: O = enemy attack (50), P = boss attack (100)
-  if(!window._testKeyCooldown) window._testKeyCooldown = 0;
-  if(now - window._testKeyCooldown > 180){
-    if(Input.isDown('o')){ playerHP = Math.max(0, playerHP - 50); window._testKeyCooldown = now; }
-    else if(Input.isDown('p')){ playerHP = Math.max(0, playerHP - 100); window._testKeyCooldown = now; }
+  if (!window._testKeyCooldown) window._testKeyCooldown = 0;
+  if (now - window._testKeyCooldown > 180) {
+    if (Input.isDown('o')) { playerHP = Math.max(0, playerHP - 50); window._testKeyCooldown = now; }
+    else if (Input.isDown('p')) { playerHP = Math.max(0, playerHP - 100); window._testKeyCooldown = now; }
+  }
+  // inventory use keys: Q = use health potion, E = use mana potion
+  if (!window._invKeyCooldown) window._invKeyCooldown = 0;
+  if (now - window._invKeyCooldown > 180) {
+    if (Input.isDown('q')) {
+      if (inventory.healthPotion > 0) { inventory.healthPotion--; playerHP = Math.min(playerMaxHP, playerHP + 50); if (hud) hud.setInventory(inventory); window._invKeyCooldown = now; }
+    } else if (Input.isDown('e')) {
+      if (inventory.manaPotion > 0) { inventory.manaPotion--; playerMana = Math.min(playerMaxMana, playerMana + 50); if (hud) hud.setInventory(inventory); window._invKeyCooldown = now; }
+    }
   }
   // simple input rate limit so holding key doesn't spam movement too fast
   if (now - lastMove > 120) {

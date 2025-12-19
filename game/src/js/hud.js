@@ -12,6 +12,16 @@
     return c;
   }
 
+  function makeInvSlot() {
+    const wrap = document.createElement('div');
+    wrap.className = 'inv-slot';
+    const canvas = document.createElement('canvas');
+    canvas.width = ICON_SIZE; canvas.height = ICON_SIZE; canvas.className = 'hud-icon';
+    const badge = document.createElement('span'); badge.className = 'inv-count'; badge.textContent = '0';
+    wrap.appendChild(canvas); wrap.appendChild(badge);
+    return wrap;
+  }
+
   function renderSpriteToCanvas(sprite, canvas, filled = true) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -30,8 +40,20 @@
       this.container = document.getElementById('hud');
       this.healthRow = document.getElementById('hud-health');
       this.manaRow = document.getElementById('hud-mana');
+      this.invRow = document.getElementById('hud-inventory');
       this.heartSprite = window.HeartSprite || null;
       this.starSprite = window.StarSprite || null;
+      this.manaPotionSprite = window.ManaPotionSprite || window.ManaPotionSprite;
+      this.healthPotionSprite = window.HealthPotionSprite || window.HealthPotionSprite;
+      this.keySprite = window.KeySprite || null;
+
+      // inventory state
+      this.inventory = { healthPotion: 2, manaPotion: 2, keys: 0 };
+      if (this.invRow) {
+        // create three slots: health potion, mana potion, keys
+        while (this.invRow.children.length < 3) this.invRow.appendChild(makeInvSlot());
+        this._renderInventory();
+      }
     }
 
     setHP(cur, max) {
@@ -60,6 +82,42 @@
           ctx.fillRect(0, 0, c.width, c.height);
         }
       }
+    }
+
+    // inventory methods
+    setInventory(inv) {
+      this.inventory = Object.assign(this.inventory || {}, inv);
+      this._renderInventory();
+    }
+
+    _renderInventory() {
+      if (!this.invRow) return;
+      const slots = this.invRow.children;
+      // health potion slot
+      const hpSlot = slots[0];
+      const hpCanvas = hpSlot.querySelector('canvas');
+      const hpBadge = hpSlot.querySelector('.inv-count');
+      if (this.healthPotionSprite) renderSpriteToCanvas(this.healthPotionSprite, hpCanvas, true);
+      hpBadge.textContent = String(this.inventory.healthPotion || 0);
+
+      // mana potion slot
+      const mpSlot = slots[1];
+      const mpCanvas = mpSlot.querySelector('canvas');
+      const mpBadge = mpSlot.querySelector('.inv-count');
+      if (this.manaPotionSprite) renderSpriteToCanvas(this.manaPotionSprite, mpCanvas, true);
+      mpBadge.textContent = String(this.inventory.manaPotion || 0);
+
+      // keys slot
+      const kSlot = slots[2];
+      const kCanvas = kSlot.querySelector('canvas');
+      const kBadge = kSlot.querySelector('.inv-count');
+      if (this.keySprite) renderSpriteToCanvas(this.keySprite, kCanvas, true);
+      else {
+        // draw simple placeholder box
+        const ctx = kCanvas.getContext('2d'); ctx.clearRect(0, 0, kCanvas.width, kCanvas.height);
+        ctx.fillStyle = '#CCCCCC'; ctx.fillRect(6, 6, ICON_SIZE - 12, ICON_SIZE - 12);
+      }
+      kBadge.textContent = String(this.inventory.keys || 0);
     }
   }
 
