@@ -7,7 +7,74 @@ canvas.width = WIDTH * TILE; canvas.height = HEIGHT * TILE;
 Input.init();
 const map = generateMap(WIDTH, HEIGHT, 0.18);
 const spriteAPI = new SpriteAPI(ctx, 1);
-const player = new Player(2, 2, WitchSprite);
+
+// helper: find a free (non-wall) tile in the map. If preferred provided, try that first.
+function findFreeTile(map, preferred) {
+  if (!map || !map.length) return { x: 1, y: 1 };
+  const H = map.length, W = map[0].length;
+  if (preferred && preferred.x >= 0 && preferred.x < W && preferred.y >= 0 && preferred.y < H) {
+    if (map[preferred.y][preferred.x] === 0) return { x: preferred.x, y: preferred.y };
+  }
+  // try random probes
+  for (let i = 0; i < 300; i++) {
+    const x = 1 + Math.floor(Math.random() * (W - 2));
+    const y = 1 + Math.floor(Math.random() * (H - 2));
+    if (map[y][x] === 0) return { x, y };
+  }
+  // fallback: scan for first non-wall
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (map[y][x] === 0) return { x, y };
+  return { x: 1, y: 1 };
+}
+
+// spawn player on a free tile
+const playerSpawn = findFreeTile(map, { x: 2, y: 2 });
+const player = new Player(playerSpawn.x, playerSpawn.y, WitchSprite);
+
+// static knight enemy (placed in the room) with simple patrol between two points; ensure free spawn
+const knightSpawn = findFreeTile(map, { x: 6, y: 6 });
+const knight = (window.Enemy && window.knightSprite) ? new window.Enemy(knightSpawn.x, knightSpawn.y, window.knightSprite, 50, 50, [{ x: knightSpawn.x, y: knightSpawn.y }, { x: Math.min(WIDTH - 2, knightSpawn.x + 4), y: knightSpawn.y }]) : null;
+
+// items dropped in the level (e.g., potions)
+const items = []; // { x, y, type, sprite }
+// chest objects
+const chests = []; // { x,y, opened }
+// active projectiles
+const projectiles = [];
+
+// firing from mouse click (left button). Fires one tile ahead in player's facing direction.
+canvas.addEventListener('mousedown', (ev) => {
+  // left button only
+  if (ev.button !== 0) return;
+  const now = Date.now();
+  if (!window._fireCooldown) window._fireCooldown = 0;
+  if (now - window._fireCooldown < 180) return;
+  window._fireCooldown = now;
+  const dir = player.facing || 'right';
+  const dx = dir === 'left' ? -1 : 1;
+  const sx = player.x + dx, sy = player.y;
+  if (map[sy] && map[sy][sx] === 0) {
+    const sprite = window.wattkSprite || null;
+    const proj = new window.Projectile(sx, sy, dir, sprite, 140, 50);
+    projectiles.push(proj);
+  }
+});
+
+// spawn a few chests on the map (avoid player/knight positions)
+function placeChests(count = 2) {
+  for (let i = 0; i < count; i++) {
+    let tries = 0;
+    while (tries++ < 400) {
+      const pos = findFreeTile(map);
+      // avoid player/knight and other chests
+      if (pos.x === player.x && pos.y === player.y) continue;
+      if (knight && pos.x === knight.x && pos.y === knight.y) continue;
+      if (chests.some(c => c.x === pos.x && c.y === pos.y)) continue;
+      chests.push({ x: pos.x, y: pos.y, opened: false });
+      break;
+    }
+  }
+}
+placeChests(2);
 
 // start loop immediately; sprite data is embedded (WitchSprite, GrassTile, StoneTile)
 let sprites = { witch: WitchSprite, grass: GrassTile, stone: StoneTile };
@@ -34,9 +101,21 @@ function update() {
   if (!window._invKeyCooldown) window._invKeyCooldown = 0;
   if (now - window._invKeyCooldown > 180) {
     if (Input.isDown('q')) {
-      if (inventory.healthPotion > 0) { inventory.healthPotion--; playerHP = Math.min(playerMaxHP, playerHP + 50); if (hud) hud.setInventory(inventory); window._invKeyCooldown = now; }
+      if (inventory.healthPotion > 0) {
+        inventory.healthPotion--;
+        const heal = hud ? hud.hpPerIcon : 50;
+        playerHP = Math.min(playerMaxHP, playerHP + heal);
+        if (hud) hud.setInventory(inventory);
+        window._invKeyCooldown = now;
+      }
     } else if (Input.isDown('e')) {
-      if (inventory.manaPotion > 0) { inventory.manaPotion--; playerMana = Math.min(playerMaxMana, playerMana + 50); if (hud) hud.setInventory(inventory); window._invKeyCooldown = now; }
+      if (inventory.manaPotion > 0) {
+        inventory.manaPotion--;
+        const mana = hud ? hud.manaPerIcon : 25;
+        playerMana = Math.min(playerMaxMana, playerMana + mana);
+        if (hud) hud.setInventory(inventory);
+        window._invKeyCooldown = now;
+      }
     }
   }
   // simple input rate limit so holding key doesn't spam movement too fast
@@ -45,6 +124,85 @@ function update() {
     else if (Input.isDown('arrowright') || Input.isDown('d')) { player.move(1, 0, map); lastMove = now; }
     else if (Input.isDown('arrowup') || Input.isDown('w')) { player.move(0, -1, map); lastMove = now; }
     else if (Input.isDown('arrowdown') || Input.isDown('s')) { player.move(0, 1, map); lastMove = now; }
+  }
+
+  // enemy touch damage (knight)
+  // player attack: F = strike adjacent enemy for 50
+  if (!window._attackCooldown) window._attackCooldown = 0;
+  if (now - window._attackCooldown > 220) {
+    if (Input.isDown('f') && knight && knight.alive) {
+      const manhattan = Math.abs(player.x - knight.x) + Math.abs(player.y - knight.y);
+      if (manhattan === 1) {
+        knight.takeDamage(50);
+        // if knight died this hit, spawn a health potion where it died
+        if (!knight.alive) {
+          const drop = { x: knight.x, y: knight.y, type: 'health', sprite: window.HealthPotionSprite || null };
+          items.push(drop);
+        }
+        window._attackCooldown = now;
+      }
+    }
+  }
+
+  // enemy touch damage (knight) - adjacency hitbox
+  if (knight && knight.alive) {
+    if (knight.tryTouch(player, now)) {
+      playerHP = Math.max(0, playerHP - knight.damage);
+    }
+  }
+
+  // pickup items if player stands on them
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (it.x === player.x && it.y === player.y) {
+      if (it.type === 'health') {
+        inventory.healthPotion = (inventory.healthPotion || 0) + 1;
+        if (hud) hud.setInventory(inventory);
+      }
+      // remove item
+      items.splice(i, 1);
+    }
+  }
+
+  // chest interaction: G to open adjacent or same-tile chest
+  if (!window._chestCooldown) window._chestCooldown = 0;
+  if (now - window._chestCooldown > 300) {
+    if (Input.isDown('g')) {
+      for (let c of chests) {
+        if (c.opened) continue;
+        const man = Math.abs(player.x - c.x) + Math.abs(player.y - c.y);
+        if (man <= 1) {
+          c.opened = true;
+          // random potion: 50% health, 50% mana
+          if (Math.random() < 0.5) {
+            inventory.healthPotion = (inventory.healthPotion || 0) + 1;
+          } else {
+            inventory.manaPotion = (inventory.manaPotion || 0) + 1;
+          }
+          if (hud) hud.setInventory(inventory);
+          window._chestCooldown = now;
+          break;
+        }
+      }
+    }
+  }
+
+  // update projectiles
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    if (!p || !p.alive) { projectiles.splice(i, 1); continue; }
+    p.update(now, map);
+    if (!p.alive) { projectiles.splice(i, 1); continue; }
+    // check collision with knight
+    if (knight && knight.alive && p.x === knight.x && p.y === knight.y) {
+      knight.takeDamage(p.damage);
+      p.alive = false;
+      projectiles.splice(i, 1);
+      if (!knight.alive) {
+        const drop = { x: knight.x, y: knight.y, type: 'health', sprite: window.HealthPotionSprite || null };
+        items.push(drop);
+      }
+    }
   }
 }
 
@@ -60,6 +218,36 @@ function draw() {
         else { ctx.fillStyle = '#F6E7F2'; ctx.fillRect(tx, ty, TILE, TILE); }
       }
     }
+  }
+  // draw enemy (patrolling)
+  if (knight) {
+    // update enemy movement
+    if (typeof knight.update === 'function') knight.update(Date.now(), map);
+    if (knight.alive) knight.draw(spriteAPI, TILE);
+  }
+
+  // draw items on ground
+  for (let it of items) {
+    if (it && it.sprite) spriteAPI.draw(it.sprite, it.x * TILE, it.y * TILE, false);
+    else {
+      // fallback: simple marker
+      ctx.fillStyle = '#FF8080'; ctx.fillRect(it.x * TILE + 4, it.y * TILE + 4, TILE - 8, TILE - 8);
+    }
+  }
+  // draw chests
+  for (let c of chests) {
+    if (!c) continue;
+    if (c.opened) {
+      if (window.ChestOpenSprite) spriteAPI.draw(window.ChestOpenSprite, c.x * TILE, c.y * TILE, false);
+      else ctx.fillStyle = '#C4A36A', ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+    } else {
+      if (window.ChestSprite) spriteAPI.draw(window.ChestSprite, c.x * TILE, c.y * TILE, false);
+      else ctx.fillStyle = '#A66A2A', ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+    }
+  }
+  // draw projectiles
+  for (let p of projectiles) {
+    if (p && p.alive) p.draw(spriteAPI, TILE);
   }
   // draw player using SpriteAPI; scale is 1 (sprite pixels = canvas pixels), tile size is TILE
   player.draw(ctx, player.x * TILE, player.y * TILE, TILE, spriteAPI);
