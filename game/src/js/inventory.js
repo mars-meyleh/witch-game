@@ -84,11 +84,74 @@
       for (let s of this.equipSlots) renderSlot(s);
       for (let s of this.invSlots) renderSlot(s);
     }
+
+    // add an item into the first empty inventory slot by sprite variable name
+    addItemByName(spriteName) {
+      if (!spriteName) return false;
+      // find first empty slot
+      for (let s of this.invSlots) {
+        if (!s.sprite) {
+          s.spriteName = spriteName;
+          s.sprite = window[spriteName] || null;
+          this.render();
+          this.save();
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // equip by slot index (0-3) using sprite variable name
+    equipSlot(index, spriteName) {
+      if (index < 0 || index >= this.equipSlots.length) return false;
+      const s = this.equipSlots[index];
+      s.spriteName = spriteName || null;
+      s.sprite = spriteName ? (window[spriteName] || null) : null;
+      this.render();
+      this.save();
+      return true;
+    }
+
+    // persistence
+    save() {
+      try {
+        const data = {
+          equip: this.equipSlots.map(s => s.spriteName || null),
+          inv: this.invSlots.map(s => s.spriteName || null)
+        };
+        localStorage.setItem('game.inventoryPanel', JSON.stringify(data));
+      } catch (e) { console.warn('inventory save failed', e); }
+    }
+
+    load() {
+      try {
+        const raw = localStorage.getItem('game.inventoryPanel');
+        if (!raw) return false;
+        const data = JSON.parse(raw);
+        if (data.equip && Array.isArray(data.equip)) {
+          for (let i = 0; i < this.equipSlots.length; i++) {
+            const name = data.equip[i] || null;
+            this.equipSlots[i].spriteName = name;
+            this.equipSlots[i].sprite = name ? (window[name] || null) : null;
+          }
+        }
+        if (data.inv && Array.isArray(data.inv)) {
+          for (let i = 0; i < this.invSlots.length; i++) {
+            const name = data.inv[i] || null;
+            this.invSlots[i].spriteName = name;
+            this.invSlots[i].sprite = name ? (window[name] || null) : null;
+          }
+        }
+        this.render();
+        return true;
+      } catch (e) { console.warn('inventory load failed', e); return false; }
+    }
   }
 
   window.InventoryPanel = InventoryPanel;
   // auto-create instance
   window.inventoryPanel = new InventoryPanel();
   // initial render
+  window.inventoryPanel.load();
   window.inventoryPanel.render();
 })();

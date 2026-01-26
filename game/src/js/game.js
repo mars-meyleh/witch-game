@@ -136,7 +136,7 @@ function update() {
         knight.takeDamage(50);
         // if knight died this hit, spawn a health potion where it died
         if (!knight.alive) {
-          const drop = { x: knight.x, y: knight.y, type: 'health', sprite: window.HealthPotionSprite || null };
+          const drop = { x: knight.x, y: knight.y, type: 'health', spriteName: 'HealthPotionSprite', sprite: window.HealthPotionSprite || null };
           items.push(drop);
         }
         window._attackCooldown = now;
@@ -155,9 +155,19 @@ function update() {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
     if (it.x === player.x && it.y === player.y) {
-      if (it.type === 'health') {
-        inventory.healthPotion = (inventory.healthPotion || 0) + 1;
-        if (hud) hud.setInventory(inventory);
+      // try to add to inventory panel first
+      let added = false;
+      if (window.inventoryPanel && it.spriteName) {
+        try { added = window.inventoryPanel.addItemByName(it.spriteName); } catch (e) { added = false; }
+      }
+      if (!added) {
+        if (it.type === 'health') {
+          inventory.healthPotion = (inventory.healthPotion || 0) + 1;
+          if (hud) hud.setInventory(inventory);
+        } else if (it.type === 'mana') {
+          inventory.manaPotion = (inventory.manaPotion || 0) + 1;
+          if (hud) hud.setInventory(inventory);
+        }
       }
       // remove item
       items.splice(i, 1);
@@ -174,12 +184,19 @@ function update() {
         if (man <= 1) {
           c.opened = true;
           // random potion: 50% health, 50% mana
-          if (Math.random() < 0.5) {
-            inventory.healthPotion = (inventory.healthPotion || 0) + 1;
+          // try to insert into inventory panel first
+          if (window.inventoryPanel) {
+            if (Math.random() < 0.5) {
+              if (!window.inventoryPanel.addItemByName('HealthPotionSprite')) { inventory.healthPotion = (inventory.healthPotion || 0) + 1; }
+            } else {
+              if (!window.inventoryPanel.addItemByName('ManaPotionSprite')) { inventory.manaPotion = (inventory.manaPotion || 0) + 1; }
+            }
+            if (hud) hud.setInventory(inventory);
           } else {
-            inventory.manaPotion = (inventory.manaPotion || 0) + 1;
+            if (Math.random() < 0.5) inventory.healthPotion = (inventory.healthPotion || 0) + 1;
+            else inventory.manaPotion = (inventory.manaPotion || 0) + 1;
+            if (hud) hud.setInventory(inventory);
           }
-          if (hud) hud.setInventory(inventory);
           window._chestCooldown = now;
           break;
         }
@@ -199,7 +216,7 @@ function update() {
       p.alive = false;
       projectiles.splice(i, 1);
       if (!knight.alive) {
-        const drop = { x: knight.x, y: knight.y, type: 'health', sprite: window.HealthPotionSprite || null };
+        const drop = { x: knight.x, y: knight.y, type: 'health', spriteName: 'HealthPotionSprite', sprite: window.HealthPotionSprite || null };
         items.push(drop);
       }
     }
@@ -228,6 +245,7 @@ function draw() {
 
   // draw items on ground
   for (let it of items) {
+    if (it && !it.sprite && it.spriteName && window[it.spriteName]) it.sprite = window[it.spriteName];
     if (it && it.sprite) spriteAPI.draw(it.sprite, it.x * TILE, it.y * TILE, false);
     else {
       // fallback: simple marker
