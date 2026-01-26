@@ -89,6 +89,19 @@ if (hud) { hud.setHP(playerHP, playerMaxHP); hud.setMana(playerMana, playerMaxMa
 // inventory state (health potions, mana potions, keys)
 let inventory = { healthPotion: 2, manaPotion: 2, keys: 0 };
 if (hud) hud.setInventory(inventory);
+// expose hud reference so inventory panel can sync counts
+if (hud) window.hud = hud;
+
+// handler called by the InventoryPanel when its contents change
+window._onInventoryPanelChanged = function (counts) {
+  if (!counts) return;
+  inventory.healthPotion = counts.healthPotion || 0;
+  inventory.manaPotion = counts.manaPotion || 0;
+  inventory.keys = counts.keys || 0;
+  if (window.hud && typeof window.hud.setInventory === 'function') window.hud.setInventory(inventory);
+};
+// if panel already exists, ask it to emit its current counts so HUD syncs
+if (window.inventoryPanel && typeof window.inventoryPanel._emitInventorySync === 'function') window.inventoryPanel._emitInventorySync();
 function update() {
   const now = Date.now();
   // test keys: O = enemy attack (50), P = boss attack (100)
@@ -101,7 +114,12 @@ function update() {
   if (!window._invKeyCooldown) window._invKeyCooldown = 0;
   if (now - window._invKeyCooldown > 180) {
     if (Input.isDown('q')) {
-      if (inventory.healthPotion > 0) {
+      // try to consume from inventory panel first
+      if (window.inventoryPanel && window.inventoryPanel.consumeItemByName && window.inventoryPanel.consumeItemByName('HealthPotionSprite')) {
+        const heal = hud ? hud.hpPerIcon : 50;
+        playerHP = Math.min(playerMaxHP, playerHP + heal);
+        window._invKeyCooldown = now;
+      } else if (inventory.healthPotion > 0) {
         inventory.healthPotion--;
         const heal = hud ? hud.hpPerIcon : 50;
         playerHP = Math.min(playerMaxHP, playerHP + heal);
@@ -109,7 +127,11 @@ function update() {
         window._invKeyCooldown = now;
       }
     } else if (Input.isDown('e')) {
-      if (inventory.manaPotion > 0) {
+      if (window.inventoryPanel && window.inventoryPanel.consumeItemByName && window.inventoryPanel.consumeItemByName('ManaPotionSprite')) {
+        const mana = hud ? hud.manaPerIcon : 25;
+        playerMana = Math.min(playerMaxMana, playerMana + mana);
+        window._invKeyCooldown = now;
+      } else if (inventory.manaPotion > 0) {
         inventory.manaPotion--;
         const mana = hud ? hud.manaPerIcon : 25;
         playerMana = Math.min(playerMaxMana, playerMana + mana);

@@ -22,10 +22,10 @@
       this.equipmentArea = document.createElement('div');
       this.equipmentArea.className = 'inv-equipment';
 
-      // example equipment slots: head, body, main, off
+      // equipment slots: Hat, Clothes A, Clothes B, Boot, Corset, Weapon
       this.equipSlots = [];
-      const equipNames = ['Head', 'Body', 'Main', 'Off'];
-      for (let i = 0; i < 4; i++) {
+      const equipNames = ['Hat', 'Clothes A', 'Clothes B', 'Boot', 'Corset', 'Weapon'];
+      for (let i = 0; i < equipNames.length; i++) {
         const wrap = document.createElement('div'); wrap.className = 'inv-slot-panel';
         const cvs = makeSlotCanvas(); wrap.appendChild(cvs);
         const label = document.createElement('div'); label.style.fontSize = '10px'; label.style.marginTop = '4px'; label.style.textAlign = 'center';
@@ -33,7 +33,7 @@
         const v = document.createElement('div'); v.style.display = 'flex'; v.style.flexDirection = 'column'; v.style.alignItems = 'center';
         v.appendChild(wrap); v.appendChild(label);
         this.equipmentArea.appendChild(v);
-        this.equipSlots.push({ wrap, cvs, sprite: null });
+        this.equipSlots.push({ wrap, cvs, sprite: null, spriteName: null, disabled: false, labelEl: label });
       }
       this.container.appendChild(this.equipmentArea);
 
@@ -48,7 +48,7 @@
         const wrap = document.createElement('div'); wrap.className = 'inv-slot-panel';
         const cvs = makeSlotCanvas(); wrap.appendChild(cvs);
         this.invArea.appendChild(wrap);
-        this.invSlots.push({ wrap, cvs, sprite: null });
+        this.invSlots.push({ wrap, cvs, sprite: null, spriteName: null, qty: 0 });
       }
       this.container.appendChild(this.invArea);
 
@@ -56,6 +56,31 @@
       this.container.appendChild(footer);
 
       document.body.appendChild(this.container);
+
+      // drag state
+      this._drag = null; // { type: 'inv'|'equip', index, spriteName, qty, sprite }
+
+      // attach handlers to slots (equip and inv)
+      const attachSlotHandlers = (slot, type, idx) => {
+        slot.wrap.addEventListener('mousedown', (ev) => {
+          ev.preventDefault();
+          this._startDrag(type, idx, ev.clientX, ev.clientY);
+        });
+        // touch support
+        slot.wrap.addEventListener('touchstart', (ev) => {
+          const t = ev.touches[0];
+          ev.preventDefault();
+          this._startDrag(type, idx, t.clientX, t.clientY);
+        }, { passive: false });
+      };
+      this.equipSlots.forEach((s, i) => { attachSlotHandlers(s, 'equip', i); s.wrap.dataset.slotType = 'equip'; s.wrap.dataset.slotIndex = i; });
+      this.invSlots.forEach((s, i) => { attachSlotHandlers(s, 'inv', i); s.wrap.dataset.slotType = 'inv'; s.wrap.dataset.slotIndex = i; });
+
+      // global mouse/touch move and up handlers for dragging
+      window.addEventListener('mousemove', (e) => { if (this._drag) this._onDragMove(e.clientX, e.clientY); });
+      window.addEventListener('mouseup', (e) => { if (this._drag) this._endDrag(e.clientX, e.clientY); });
+      window.addEventListener('touchmove', (e) => { if (this._drag) { const t = e.touches[0]; this._onDragMove(t.clientX, t.clientY); } }, { passive: false });
+      window.addEventListener('touchend', (e) => { if (this._drag) { this._endDrag(); } });
 
       // key toggle
       document.addEventListener('keydown', (e) => {
@@ -80,6 +105,21 @@
           // empty visual
           ctx.fillStyle = 'rgba(0,0,0,0.03)'; ctx.fillRect(0, 0, slot.cvs.width, slot.cvs.height);
         }
+        if (slot.disabled) {
+          ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(0, 0, slot.cvs.width, slot.cvs.height);
+          ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(4, 4); ctx.lineTo(slot.cvs.width - 4, slot.cvs.height - 4); ctx.moveTo(slot.cvs.width - 4, 4); ctx.lineTo(4, slot.cvs.height - 4); ctx.stroke();
+        }
+        // draw quantity for stackable items
+        if (slot.qty && slot.qty > 1) {
+          const fontSize = Math.max(10, ICON_SCALE * 4);
+          ctx.font = fontSize + 'px sans-serif';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'bottom';
+          const text = String(slot.qty);
+          ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.9)'; ctx.strokeText(text, slot.cvs.width - 4, slot.cvs.height - 4);
+          ctx.fillStyle = 'white'; ctx.fillText(text, slot.cvs.width - 4, slot.cvs.height - 4);
+        }
       };
       for (let s of this.equipSlots) renderSlot(s);
       for (let s of this.invSlots) renderSlot(s);
@@ -88,28 +128,205 @@
     // add an item into the first empty inventory slot by sprite variable name
     addItemByName(spriteName) {
       if (!spriteName) return false;
+      // stack into existing consumable if possible
+      if (this._isConsumable(spriteName)) {
+        for (let s of this.invSlots) {
+          if (s.spriteName === spriteName) {
+            s.qty = (s.qty || 1) + 1;
+            if (!s.sprite) s.sprite = window[spriteName] || null;
+            this.render(); this.save(); this._emitInventorySync();
+            return true;
+          }
+        }
+      }
+      // ensure sprite reference when stacking
+      if (this._isConsumable(spriteName)) {
+        for (let s of this.invSlots) {
+          if (s.spriteName === spriteName && !s.sprite) { s.sprite = window[spriteName] || null; }
+        }
+      }
       // find first empty slot
       for (let s of this.invSlots) {
         if (!s.sprite) {
           s.spriteName = spriteName;
           s.sprite = window[spriteName] || null;
+          s.qty = this._isConsumable(spriteName) ? 1 : 0;
           this.render();
           this.save();
+          this._emitInventorySync();
           return true;
         }
       }
       return false;
     }
 
-    // equip by slot index (0-3) using sprite variable name
+    // helper to detect dresses by name
+    _isDress(name) {
+      return (typeof name === 'string') && /dress/i.test(name);
+    }
+
+    // consumable detection (potion/health/mana)
+    _isConsumable(name) {
+      return (typeof name === 'string') && /(potion|health|mana)/i.test(name);
+    }
+
+    // equip by slot index using sprite variable name
     equipSlot(index, spriteName) {
       if (index < 0 || index >= this.equipSlots.length) return false;
+      // Clothes B (index 2) is disabled if Clothes A (index 1) contains a Dress
       const s = this.equipSlots[index];
+
+      // If trying to equip Clothes B while Clothes A is a dress, prevent it
+      if (index === 2) {
+        const a = this.equipSlots[1];
+        if (a && this._isDress(a.spriteName)) {
+          console.warn('Cannot equip Clothes B while Clothes A is a Dress.');
+          return false;
+        }
+      }
+
       s.spriteName = spriteName || null;
       s.sprite = spriteName ? (window[spriteName] || null) : null;
+      // special handling when equipping Clothes A
+      if (index === 1) {
+        const b = this.equipSlots[2];
+        if (this._isDress(s.spriteName)) {
+          // disable and clear Clothes B
+          if (b) { b.spriteName = null; b.sprite = null; b.disabled = true; }
+        } else {
+          if (b) { b.disabled = false; }
+        }
+      }
+
       this.render();
       this.save();
+      this._emitInventorySync();
       return true;
+    }
+
+    // Drag & drop helpers
+    _startDrag(type, index, x, y) {
+      const src = (type === 'equip') ? this.equipSlots[index] : this.invSlots[index];
+      if (!src || !src.spriteName) return;
+      // don't start drag on disabled slot
+      if (src.disabled) return;
+      this._drag = {
+        type, index,
+        spriteName: src.spriteName,
+        qty: src.qty || 1,
+        sprite: src.sprite
+      };
+      // create ghost canvas
+      const g = document.createElement('canvas'); g.width = src.cvs.width; g.height = src.cvs.height; g.className = 'inv-drag-ghost';
+      g.style.position = 'fixed'; g.style.pointerEvents = 'none'; g.style.zIndex = 9999; g.style.width = src.cvs.style.width; g.style.height = src.cvs.style.height;
+      document.body.appendChild(g);
+      this._drag.ghost = g; this._drag.ghostCtx = g.getContext('2d');
+      const api = new window.SpriteAPI(this._drag.ghostCtx, ICON_SCALE);
+      api.draw(this._drag.sprite, 0, 0, false);
+      this._onDragMove(x, y);
+    }
+
+    _onDragMove(x, y) {
+      if (!this._drag) return;
+      const g = this._drag.ghost;
+      g.style.left = (x - g.width / 2) + 'px'; g.style.top = (y - g.height / 2) + 'px';
+    }
+
+    _endDrag(x, y) {
+      if (!this._drag) return;
+      const ghost = this._drag.ghost; if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+      // find drop target
+      let targetEl = null;
+      if (typeof x === 'number' && typeof y === 'number') targetEl = document.elementFromPoint(x, y);
+      // fallback: if no coords provided, cancel
+      if (!targetEl) { this._drag = null; return; }
+      // find slot element ancestor
+      let el = targetEl;
+      while (el && el !== document.body && !el.classList.contains('inv-slot-panel')) el = el.parentNode;
+      if (!el || el === document.body) { this._drag = null; return; }
+      // determine target slot
+      const isEquip = el && el.dataset && el.dataset.slotType === 'equip';
+      const idx = el ? Number(el.dataset.slotIndex) : NaN;
+      if (isNaN(idx)) { this._drag = null; return; }
+      this._performDrop(this._drag, isEquip ? 'equip' : 'inv', idx);
+      this._drag = null;
+      this.render(); this.save();
+    }
+
+    _performDrop(drag, destType, destIndex) {
+      const srcType = drag.type; const srcIndex = drag.index;
+      const srcSlot = (srcType === 'equip') ? this.equipSlots[srcIndex] : this.invSlots[srcIndex];
+      const destSlot = (destType === 'equip') ? this.equipSlots[destIndex] : this.invSlots[destIndex];
+      if (!srcSlot || !destSlot) return;
+      // if destination is disabled, do nothing
+      if (destSlot.disabled) return;
+      // stacking: if dest is inv and both consumable and same name
+      if (destType === 'inv' && this._isConsumable(drag.spriteName) && destSlot.spriteName === drag.spriteName) {
+        destSlot.qty = (destSlot.qty || 1) + (drag.qty || 1);
+        // clear or decrement source
+        if (srcType === 'inv') { srcSlot.spriteName = null; srcSlot.sprite = null; srcSlot.qty = 0; }
+        else { srcSlot.spriteName = null; srcSlot.sprite = null; srcSlot.qty = 0; }
+        return;
+      }
+      // If destination empty: move
+      if (!destSlot.spriteName) {
+        destSlot.spriteName = drag.spriteName; destSlot.sprite = drag.sprite; destSlot.qty = drag.qty || (this._isConsumable(drag.spriteName) ? 1 : 0);
+        // clear source
+        srcSlot.spriteName = null; srcSlot.sprite = null; srcSlot.qty = 0;
+        return;
+      }
+      // otherwise swap
+      const tmpName = destSlot.spriteName; const tmpSprite = destSlot.sprite; const tmpQty = destSlot.qty || 0;
+      destSlot.spriteName = drag.spriteName; destSlot.sprite = drag.sprite; destSlot.qty = drag.qty || (this._isConsumable(drag.spriteName) ? 1 : 0);
+      srcSlot.spriteName = tmpName; srcSlot.sprite = tmpSprite; srcSlot.qty = tmpQty;
+      // special: if swapping into Clothes B but Clothes A is a dress, disallow and revert
+      if (destType === 'equip' && destIndex === 2 && this._isDress(this.equipSlots[1] && this.equipSlots[1].spriteName)) {
+        // revert swap
+        destSlot.spriteName = tmpName; destSlot.sprite = tmpSprite; destSlot.qty = tmpQty;
+        srcSlot.spriteName = drag.spriteName; srcSlot.sprite = drag.sprite; srcSlot.qty = drag.qty || 0;
+        console.warn('Cannot place into Clothes B while Clothes A is a Dress.');
+      }
+      // recompute Clothes B disabled state derived from Clothes A
+      if (this._isDress(this.equipSlots[1] && this.equipSlots[1].spriteName)) {
+        if (this.equipSlots[2]) { this.equipSlots[2].spriteName = null; this.equipSlots[2].sprite = null; this.equipSlots[2].qty = 0; this.equipSlots[2].disabled = true; }
+      } else {
+        if (this.equipSlots[2]) { this.equipSlots[2].disabled = false; }
+      }
+      this._emitInventorySync();
+    }
+
+    // consume a consumable from inventory panel by spriteName, returns true if consumed
+    consumeItemByName(spriteName, count = 1) {
+      if (!spriteName || count <= 0) return false;
+      for (let s of this.invSlots) {
+        if (s.spriteName === spriteName && (s.qty || 0) > 0) {
+          s.qty = (s.qty || 1) - count;
+          if (s.qty <= 0) { s.spriteName = null; s.sprite = null; s.qty = 0; }
+          this.render(); this.save(); this._emitInventorySync();
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // compute consumable counts in inventory and notify host (if handler exists)
+    _emitInventorySync() {
+      const counts = { healthPotion: 0, manaPotion: 0, keys: 0 };
+      for (let s of this.invSlots) {
+        if (!s || !s.spriteName) continue;
+        const n = s.spriteName;
+        const qty = s.qty || 1;
+        if (/health/i.test(n) || /HealthPotion/i.test(n)) counts.healthPotion += qty;
+        else if (/mana/i.test(n) || /ManaPotion/i.test(n)) counts.manaPotion += qty;
+        else if (/key/i.test(n) || /KeySprite/i.test(n)) counts.keys += qty;
+      }
+      // if a global handler exists, call it
+      if (typeof window._onInventoryPanelChanged === 'function') {
+        try { window._onInventoryPanelChanged(counts); } catch (e) { console.warn('inventory sync handler error', e); }
+      } else if (window.hud && typeof window.hud.setInventory === 'function') {
+        // fallback: update hud directly
+        try { window.hud.setInventory(counts); } catch (e) { /* ignore */ }
+      }
     }
 
     // persistence
@@ -117,7 +334,7 @@
       try {
         const data = {
           equip: this.equipSlots.map(s => s.spriteName || null),
-          inv: this.invSlots.map(s => s.spriteName || null)
+          inv: this.invSlots.map(s => s.spriteName ? { name: s.spriteName, qty: s.qty || 1 } : null)
         };
         localStorage.setItem('game.inventoryPanel', JSON.stringify(data));
       } catch (e) { console.warn('inventory save failed', e); }
@@ -133,16 +350,33 @@
             const name = data.equip[i] || null;
             this.equipSlots[i].spriteName = name;
             this.equipSlots[i].sprite = name ? (window[name] || null) : null;
+            this.equipSlots[i].disabled = false;
+          }
+          // derived disabled state: if Clothes A is a Dress, disable Clothes B
+          if (this._isDress(this.equipSlots[1] && this.equipSlots[1].spriteName)) {
+            if (this.equipSlots[2]) { this.equipSlots[2].spriteName = null; this.equipSlots[2].sprite = null; this.equipSlots[2].disabled = true; }
           }
         }
         if (data.inv && Array.isArray(data.inv)) {
           for (let i = 0; i < this.invSlots.length; i++) {
-            const name = data.inv[i] || null;
-            this.invSlots[i].spriteName = name;
-            this.invSlots[i].sprite = name ? (window[name] || null) : null;
+            const entry = data.inv[i] || null;
+            if (!entry) { this.invSlots[i].spriteName = null; this.invSlots[i].sprite = null; this.invSlots[i].qty = 0; continue; }
+            if (typeof entry === 'string') {
+              this.invSlots[i].spriteName = entry;
+              this.invSlots[i].sprite = window[entry] || null;
+              this.invSlots[i].qty = 1;
+            } else if (entry && typeof entry === 'object') {
+              const name = entry.name || null; const qty = Number(entry.qty) || 1;
+              this.invSlots[i].spriteName = name;
+              this.invSlots[i].sprite = name ? (window[name] || null) : null;
+              this.invSlots[i].qty = qty;
+            } else {
+              this.invSlots[i].spriteName = null; this.invSlots[i].sprite = null; this.invSlots[i].qty = 0;
+            }
           }
         }
         this.render();
+        this._emitInventorySync();
         return true;
       } catch (e) { console.warn('inventory load failed', e); return false; }
     }
