@@ -1,6 +1,6 @@
 // HUD: draws heart and star icons outside the canvas using SpriteAPI
 (function () {
-  const ICON_SCALE = 2; // each icon will be 32x32
+  const ICON_SCALE = 1; // each icon will be 32x32
   const ICON_SIZE = 16 * ICON_SCALE;
 
   function makeIconCanvas() {
