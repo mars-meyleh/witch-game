@@ -1,0 +1,18 @@
+so has been decided that the color of the equipments will be directly attached to the damage type 
+which i have concluded then that pink means poison cuz why fucking not?
+so let's try to extructure this a bit more
+
+Witch has - starting attributes - att 1, def 1, speed 1, hp 150 (3 hearts) and mp also 150(3 hearts),
+
+but according to my notes, me very smart and put lot of shit to make it complicated cuz why not?
+So the list goes so far:
+- inteligence influences mana and smth else influences mana regen (but then kinda collecting or producing potions feels obsolete so no mp or hp regen EHE)
+- attk speed and speed, i kinda know they are not the same, but firstly i need to think how the character move in the game, and how this influences the esthetic of it,
+i am getting very cold, sleepy and i need more coffee definitely. Speed for later and if added only attack speed then.
+- thorn kinda makes more sense than speed by itself i feel like.
+well naturaly the things equipped affect the atributs, and we can have different levels of rarity, and this could make them stronger-better-kinda-ish, but not that much maybe? cuz in the end she levels up
+
+
+How does she level up? exp earned by mob kill? Enchanted scrolls? magic animal in the forest gives her weed ?
+can it be that when she levels up the attributes that change are kinda blocked, in the sense like only mana and hp and attk and def gets upgradable but she NEEDS the equipment to be better to get better combos?
+i like it more like this
