@@ -4,6 +4,33 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 canvas.width = WIDTH * TILE; canvas.height = HEIGHT * TILE;
 
+// Global error overlay to surface runtime errors (helps debugging when game won't load)
+(function () {
+  function showError(msg) {
+    console.error(msg);
+    try {
+      let el = document.getElementById('js-error-overlay');
+      if (!el) {
+        el = document.createElement('div'); el.id = 'js-error-overlay';
+        Object.assign(el.style, {
+          position: 'fixed', left: '8px', right: '8px', top: '8px', padding: '12px', background: 'rgba(255,80,80,0.95)', color: 'white', fontFamily: 'monospace', zIndex: 99999, borderRadius: '6px', whiteSpace: 'pre-wrap'
+        });
+        document.body.appendChild(el);
+      }
+      el.textContent = String(msg);
+    } catch (e) { console.error('Failed to show error overlay', e); }
+  }
+  window.addEventListener('error', (ev) => {
+    const msg = ev && ev.message ? (ev.message + ' @ ' + ev.filename + ':' + ev.lineno) : String(ev);
+    showError(msg);
+  });
+  window.addEventListener('unhandledrejection', (ev) => {
+    const r = ev && ev.reason ? ev.reason : ev;
+    const msg = r && r.message ? ('UnhandledRejection: ' + r.message) : ('UnhandledRejection: ' + String(r));
+    showError(msg);
+  });
+})();
+
 Input.init();
 const map = generateMap(WIDTH, HEIGHT, 0.18);
 const spriteAPI = new SpriteAPI(ctx, 1);
@@ -77,7 +104,28 @@ function placeChests(count = 2) {
 placeChests(2);
 
 // start loop immediately; sprite data is embedded (WitchSprite, GrassTile, StoneTile)
-let sprites = { witch: WitchSprite, grass: GrassTile, stone: StoneTile };
+let sprites = { witch: WitchSprite};
+
+// preload chest images (3-frame opening animation)
+SpriteLoader.load([
+  'src/assets/sprites/chest/chest-closed.png',
+  'src/assets/sprites/chest/chest-open1.png',
+  'src/assets/sprites/chest/chest-open2.png'
+]).then(({images}) => {
+  const keys = [
+    'src/assets/sprites/chest/chest-closed.png',
+    'src/assets/sprites/chest/chest-open1.png',
+    'src/assets/sprites/chest/chest-open2.png'
+  ];
+  window._chestImages = keys.map(k => images[k] || null);
+  const missing = window._chestImages.map((img, i) => img ? null : keys[i]).filter(Boolean);
+  window._chestImagesLoaded = (missing.length === 0);
+  if (window._chestImagesLoaded) {
+    console.info('Chest images loaded:', keys);
+  } else {
+    console.warn('Chest images missing or failed to load:', missing);
+  }
+});
 
 let lastMove = 0;
 // player stats (HP uses hpPerIcon = 50 by default in HUD)
@@ -225,6 +273,8 @@ function update() {
         const man = Math.abs(player.x - c.x) + Math.abs(player.y - c.y);
         if (man <= 1) {
           c.opened = true;
+          // record animation start time
+          c.openStart = now;
           // random potion: 50% health, 50% mana
           // try to insert into inventory panel first
           if (window.inventoryPanel) {
@@ -297,12 +347,39 @@ function draw() {
   // draw chests
   for (let c of chests) {
     if (!c) continue;
+    const chestImgs = (window._chestImages && window._chestImages.length) ? window._chestImages : null;
+    const chestImgsLoaded = window._chestImagesLoaded === true;
     if (c.opened) {
-      if (window.ChestOpenSprite) spriteAPI.draw(window.ChestOpenSprite, c.x * TILE, c.y * TILE, false);
-      else ctx.fillStyle = '#C4A36A', ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+      if (chestImgs && chestImgsLoaded) {
+        // play opening animation: frames 0..N-1 over duration
+        const frameDuration = 120; // ms per frame
+        const elapsed = (c.openStart ? (Date.now() - c.openStart) : Infinity);
+        const total = chestImgs.length * frameDuration;
+        const idx = elapsed >= total ? (chestImgs.length - 1) : Math.floor(elapsed / frameDuration);
+        ctx.imageSmoothingEnabled = false;
+        const img = chestImgs[Math.max(0, Math.min(chestImgs.length - 1, idx))];
+        if (img) ctx.drawImage(img, c.x * TILE, c.y * TILE, TILE, TILE);
+        else ctx.fillStyle = '#C4A36A', ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+      } else if (chestImgs && !chestImgsLoaded) {
+        // images partially available or failed to load — warn once and fall back to rectangle
+        if (!c._chestLoadWarned) { console.warn('Chest images not fully available; falling back to rectangle fallback.'); c._chestLoadWarned = true; }
+        ctx.fillStyle = '#C4A36A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+      } else {
+        ctx.fillStyle = '#C4A36A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+      }
     } else {
-      if (window.ChestSprite) spriteAPI.draw(window.ChestSprite, c.x * TILE, c.y * TILE, false);
-      else ctx.fillStyle = '#A66A2A', ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+      if (chestImgs && chestImgsLoaded) {
+        // show closed frame (frame 0)
+        ctx.imageSmoothingEnabled = false;
+        const img = chestImgs[0];
+        if (img) ctx.drawImage(img, c.x * TILE, c.y * TILE, TILE, TILE);
+        else ctx.fillStyle = '#A66A2A', ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+      } else if (chestImgs && !chestImgsLoaded) {
+        if (!c._chestLoadWarned) { console.warn('Chest images not fully available; falling back to rectangle fallback.'); c._chestLoadWarned = true; }
+        ctx.fillStyle = '#A66A2A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+      } else {
+        ctx.fillStyle = '#A66A2A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+      }
     }
   }
   // draw projectiles

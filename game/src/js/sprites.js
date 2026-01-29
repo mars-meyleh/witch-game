@@ -27,29 +27,6 @@ const Palette = {
     6: "#3D6E70"
   },
 
-  chest: {
-    0: null,
-    1: '#E4B86B', // gold highlight
-    2: '#A66A2A', // wood medium
-    3: '#6B3F20', // wood dark
-    4: '#D99F4A', // lighter gold
-    5: '#6C4A2A'  // shadow
-  },
-
-  grass: {
-    0: null,
-    14: "#3CA370",
-    15: "#277E53",
-    16: "#206342"
-  },
-
-  stone: {
-    0: null,
-    17: "#606070",
-    18: "#43434F",
-    19: "#272736"
-  }
-  ,
   heart: {
     0: null,
     1: "#FFFFEBFF",
@@ -143,30 +120,6 @@ const wattkSprite = {
     [0, 0, 0, 0, 3, 3, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
-};
-
-const knightSprite = {
-  id: "knight.basic",
-  size: 16,
-  palette: "stone",
-  pixels: [
-    [0, 0, 0, 0, 18, 18, 18, 18, 18, 18, 18, 18, 0, 0, 0, 0],
-    [0, 0, 0, 18, 19, 19, 19, 19, 19, 19, 19, 19, 18, 0, 0, 0],
-    [0, 0, 18, 19, 18, 18, 18, 18, 18, 18, 18, 18, 19, 18, 0, 0],
-    [0, 18, 19, 18, 18, 18, 17, 17, 17, 17, 18, 18, 18, 19, 18, 0],
-    [0, 18, 18, 18, 18, 17, 17, 17, 17, 17, 17, 18, 18, 18, 18, 0],
-    [0, 0, 18, 18, 17, 17, 18, 18, 18, 18, 17, 17, 18, 18, 0, 0],
-    [0, 0, 0, 18, 17, 18, 18, 19, 19, 18, 18, 17, 18, 0, 0, 0],
-    [0, 0, 0, 17, 17, 18, 19, 18, 18, 19, 18, 17, 17, 0, 0, 0],
-    [0, 0, 0, 0, 17, 18, 18, 18, 18, 18, 18, 17, 0, 0, 0, 0],
-    [0, 0, 0, 0, 17, 17, 17, 0, 0, 17, 17, 17, 0, 0, 0, 0],
-    [0, 0, 0, 17, 18, 17, 0, 0, 0, 0, 17, 18, 17, 0, 0, 0],
-    [0, 0, 0, 18, 18, 18, 0, 0, 0, 0, 18, 18, 18, 0, 0, 0],
-    [0, 0, 18, 18, 18, 18, 0, 0, 0, 0, 18, 18, 18, 18, 0, 0],
-    [0, 0, 18, 19, 18, 18, 0, 0, 0, 0, 18, 18, 19, 18, 0, 0],
-    [0, 0, 17, 17, 17, 0, 0, 0, 0, 0, 0, 17, 17, 17, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-  ]
 };
 
 const golemSprite = {
@@ -338,37 +291,6 @@ const floorSprite = {
   ]
 };
 
-// Example tiles (can be swapped for JSON-loaded data later)
-const GrassTile = {
-  id: "tile.grass",
-  size: 16,
-  palette: "grass",
-  pixels: (function () {
-    const rows = [];
-    for (let y = 0; y < 16; y++) {
-      const row = [];
-      for (let x = 0; x < 16; x++) { row.push(14 + ((x + y) & 1)); }
-      rows.push(row);
-    }
-    return rows;
-  })()
-};
-
-const StoneTile = {
-  id: "tile.stone",
-  size: 16,
-  palette: "stone",
-  pixels: (function () {
-    const rows = [];
-    for (let y = 0; y < 16; y++) {
-      const row = [];
-      for (let x = 0; x < 16; x++) { row.push(17 + ((x + y) % 3)); }
-      rows.push(row);
-    }
-    return rows;
-  })()
-};
-
 class SpriteAPI {
   constructor(ctx, scale = 1) {
     this.ctx = ctx;
@@ -412,8 +334,6 @@ class SpriteAPI {
 // expose on window for easy access from other modules
 window.Palette = Palette;
 window.WitchSprite = WitchSprite;
-window.GrassTile = GrassTile;
-window.StoneTile = StoneTile;
 window.SpriteAPI = SpriteAPI;
 // expose floor and wall tiles as well
 if (typeof wallSprite !== 'undefined') window.wallSprite = wallSprite;
@@ -424,7 +344,6 @@ if (typeof StarSprite !== 'undefined') window.StarSprite = StarSprite;
 if (typeof ManaPotionSprite !== 'undefined') window.ManaPotionSprite = ManaPotionSprite;
 if (typeof HealthPotionSprite !== 'undefined') window.HealthPotionSprite = HealthPotionSprite;
 // expose enemies
-if (typeof knightSprite !== 'undefined') window.knightSprite = knightSprite;
 if (typeof golemSprite !== 'undefined') window.golemSprite = golemSprite;
 if (typeof wattkSprite !== 'undefined') window.wattkSprite = wattkSprite;
 
@@ -453,53 +372,3 @@ const KeySprite = {
   ]
 };
 window.KeySprite = KeySprite;
-
-const ChestSprite = {
-  id: 'item.chest',
-  size: 16,
-  palette: 'chest',
-  pixels: [
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 1, 1, 4, 4, 1, 1, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 1, 1, 4, 4, 4, 4, 1, 1, 0, 0, 0, 0],
-    [0, 0, 0, 1, 1, 4, 4, 4, 4, 4, 4, 1, 1, 0, 0, 0],
-    [0, 0, 1, 1, 4, 4, 2, 2, 2, 2, 4, 4, 1, 1, 0, 0],
-    [0, 0, 1, 4, 4, 2, 2, 2, 2, 2, 2, 4, 4, 1, 0, 0],
-    [0, 0, 1, 4, 4, 2, 2, 5, 5, 2, 2, 4, 4, 1, 0, 0],
-    [0, 0, 1, 4, 4, 2, 2, 5, 5, 2, 2, 4, 4, 1, 0, 0],
-    [0, 0, 1, 1, 4, 4, 2, 2, 2, 2, 4, 4, 1, 1, 0, 0],
-    [0, 0, 0, 1, 1, 4, 4, 4, 4, 4, 4, 1, 1, 0, 0, 0],
-    [0, 0, 0, 0, 1, 1, 4, 4, 4, 4, 1, 1, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-  ]
-};
-window.ChestSprite = ChestSprite;
-
-const ChestOpenSprite = {
-  id: 'item.chest.open',
-  size: 16,
-  palette: 'chest',
-  pixels: [
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 1, 1, 4, 4, 1, 1, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 1, 1, 4, 4, 4, 4, 1, 1, 0, 0, 0, 0],
-    [0, 0, 0, 1, 1, 4, 4, 4, 4, 4, 4, 1, 1, 0, 0, 0],
-    [0, 0, 1, 1, 4, 4, 2, 2, 2, 2, 4, 4, 1, 1, 0, 0],
-    [0, 0, 1, 4, 4, 2, 2, 0, 0, 2, 2, 4, 4, 1, 0, 0],
-    [0, 0, 1, 4, 4, 2, 0, 0, 0, 0, 2, 4, 4, 1, 0, 0],
-    [0, 0, 1, 4, 4, 2, 0, 0, 0, 0, 2, 4, 4, 1, 0, 0],
-    [0, 0, 1, 1, 4, 4, 2, 2, 2, 2, 4, 4, 1, 1, 0, 0],
-    [0, 0, 0, 1, 1, 4, 4, 4, 4, 4, 4, 1, 1, 0, 0, 0],
-    [0, 0, 0, 0, 1, 1, 4, 4, 4, 4, 1, 1, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-  ]
-};
-window.ChestOpenSprite = ChestOpenSprite;
