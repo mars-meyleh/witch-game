@@ -16,8 +16,37 @@
       this.container.id = 'inventory-panel';
       this.container.className = 'inventory-panel hidden';
 
-      const title = document.createElement('h3'); title.textContent = 'Equipment';
-      this.container.appendChild(title);
+      // Create tab buttons
+      this.tabButtonsContainer = document.createElement('div');
+      this.tabButtonsContainer.className = 'inv-tab-buttons';
+      
+      this.tabs = {};
+      const tabNames = ['Equipment & Inventory', 'Attributes', 'Grimoire'];
+      tabNames.forEach((tabName, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'inv-tab-button' + (idx === 0 ? ' active' : '');
+        btn.textContent = tabName;
+        const tabKey = tabName === 'Equipment & Inventory' ? 'equipment' : tabName.toLowerCase();
+        btn.dataset.tab = tabKey;
+        btn.addEventListener('click', () => this.switchTab(tabKey));
+        this.tabButtonsContainer.appendChild(btn);
+        this.tabs[tabKey] = { button: btn };
+      });
+      this.container.appendChild(this.tabButtonsContainer);
+
+      // Create tab content areas
+      this.contentContainer = document.createElement('div');
+      this.contentContainer.className = 'inv-content-area';
+      this.container.appendChild(this.contentContainer);
+
+      // Equipment & Inventory tab content
+      const equipmentTab = document.createElement('div');
+      equipmentTab.className = 'inv-tab-content active';
+      equipmentTab.dataset.tab = 'equipment';
+      this.tabs['equipment'].content = equipmentTab;
+
+      const equipTitle = document.createElement('h3'); equipTitle.textContent = 'Equipment';
+      equipmentTab.appendChild(equipTitle);
 
       this.equipmentArea = document.createElement('div');
       this.equipmentArea.className = 'inv-equipment';
@@ -35,10 +64,11 @@
         this.equipmentArea.appendChild(v);
         this.equipSlots.push({ wrap, cvs, sprite: null, spriteName: null, disabled: false, labelEl: label });
       }
-      this.container.appendChild(this.equipmentArea);
+      equipmentTab.appendChild(this.equipmentArea);
 
+      // Add Inventory title and grid to same tab
       const invTitle = document.createElement('h3'); invTitle.textContent = 'Inventory';
-      this.container.appendChild(invTitle);
+      equipmentTab.appendChild(invTitle);
 
       this.invArea = document.createElement('div');
       this.invArea.className = 'inv-grid';
@@ -50,7 +80,79 @@
         this.invArea.appendChild(wrap);
         this.invSlots.push({ wrap, cvs, sprite: null, spriteName: null, qty: 0 });
       }
-      this.container.appendChild(this.invArea);
+      equipmentTab.appendChild(this.invArea);
+      this.contentContainer.appendChild(equipmentTab);
+
+      // Attributes tab content
+      const attributesTab = document.createElement('div');
+      attributesTab.className = 'inv-tab-content';
+      attributesTab.dataset.tab = 'attributes';
+      this.tabs['attributes'].content = attributesTab;
+
+      const attrTitle = document.createElement('h3'); attrTitle.textContent = 'Attributes';
+      attributesTab.appendChild(attrTitle);
+
+      this.attributesArea = document.createElement('div');
+      this.attributesArea.className = 'inv-attributes';
+      
+      // Create attribute rows: each row has a label and a value
+      const attributeNames = [
+        { key: 'attk', label: 'Attk' },
+        { key: 'deff', label: 'Deff' },
+        { key: 'maxHp', label: 'Max HP' },
+        { key: 'maxMp', label: 'Max MP' },
+        { key: 'attkSpeed', label: 'Attk Speed' },
+        { key: 'thorn', label: 'Thorn' },
+        { key: 'poisonDmg', label: 'Poison Dmg' },
+        { key: 'fireDmg', label: 'Fire Dmg' },
+        { key: 'coldDmg', label: 'Cold Dmg' },
+        { key: 'bleeding', label: 'Bleeding' },
+        { key: 'burning', label: 'Burning' },
+        { key: 'freezing', label: 'Freezing' }
+      ];
+
+      this.attributeElements = {};
+      for (let attr of attributeNames) {
+        const row = document.createElement('div');
+        row.className = 'attr-row';
+        
+        const label = document.createElement('span');
+        label.className = 'attr-label';
+        label.textContent = attr.label;
+        
+        const value = document.createElement('span');
+        value.className = 'attr-value';
+        value.textContent = '0';
+        
+        row.appendChild(label);
+        row.appendChild(value);
+        this.attributesArea.appendChild(row);
+        
+        this.attributeElements[attr.key] = value;
+      }
+      
+      attributesTab.appendChild(this.attributesArea);
+      this.contentContainer.appendChild(attributesTab);
+
+      // Grimoire tab content (knowledge log from runs)
+      const grimoireTab = document.createElement('div');
+      grimoireTab.className = 'inv-tab-content';
+      grimoireTab.dataset.tab = 'grimoire';
+      this.tabs['grimoire'].content = grimoireTab;
+
+      const grimTitle = document.createElement('h3'); grimTitle.textContent = 'Grimoire';
+      grimoireTab.appendChild(grimTitle);
+
+      this.grimoireArea = document.createElement('div');
+      this.grimoireArea.className = 'inv-grimoire';
+      
+      const grimContent = document.createElement('div');
+      grimContent.className = 'grimoire-content';
+      grimContent.textContent = 'Knowledge and discoveries will be recorded here...';
+      this.grimoireArea.appendChild(grimContent);
+
+      grimoireTab.appendChild(this.grimoireArea);
+      this.contentContainer.appendChild(grimoireTab);
 
       const footer = document.createElement('div'); footer.className = 'inv-panel-footer'; footer.textContent = 'Press C to close';
       this.container.appendChild(footer);
@@ -93,6 +195,38 @@
     open() { this.container.classList.remove('hidden'); }
     close() { this.container.classList.add('hidden'); }
     toggle() { this.container.classList.toggle('hidden'); }
+
+    // Switch between tabs
+    switchTab(tabName) {
+      // Hide all tabs and deactivate all buttons
+      Object.keys(this.tabs).forEach(key => {
+        if (this.tabs[key].content) this.tabs[key].content.classList.remove('active');
+        if (this.tabs[key].button) this.tabs[key].button.classList.remove('active');
+      });
+      
+      // Show selected tab and activate button
+      if (this.tabs[tabName]) {
+        if (this.tabs[tabName].content) this.tabs[tabName].content.classList.add('active');
+        if (this.tabs[tabName].button) this.tabs[tabName].button.classList.add('active');
+      }
+    }
+
+    // update displayed attributes from playerAttributes
+    updateAttributes(attrs) {
+      if (!attrs) return;
+      if (this.attributeElements['attk']) this.attributeElements['attk'].textContent = String(attrs.attk || 0);
+      if (this.attributeElements['deff']) this.attributeElements['deff'].textContent = String(attrs.deff || 0);
+      if (this.attributeElements['maxHp']) this.attributeElements['maxHp'].textContent = String(attrs.maxHp || 0);
+      if (this.attributeElements['maxMp']) this.attributeElements['maxMp'].textContent = String(attrs.maxMp || 0);
+      if (this.attributeElements['attkSpeed']) this.attributeElements['attkSpeed'].textContent = String(attrs.attkSpeed || 0);
+      if (this.attributeElements['thorn']) this.attributeElements['thorn'].textContent = String(attrs.thorn || 0);
+      if (this.attributeElements['poisonDmg']) this.attributeElements['poisonDmg'].textContent = String(attrs.poisonDmg || 0);
+      if (this.attributeElements['fireDmg']) this.attributeElements['fireDmg'].textContent = String(attrs.fireDmg || 0);
+      if (this.attributeElements['coldDmg']) this.attributeElements['coldDmg'].textContent = String(attrs.coldDmg || 0);
+      if (this.attributeElements['bleeding']) this.attributeElements['bleeding'].textContent = String(attrs.bleeding || 0);
+      if (this.attributeElements['burning']) this.attributeElements['burning'].textContent = String(attrs.burning || 0);
+      if (this.attributeElements['freezing']) this.attributeElements['freezing'].textContent = String(attrs.freezing || 0);
+    }
 
     // render sprites into slots
     render() {

@@ -83,12 +83,32 @@ let lastMove = 0;
 // player stats (HP uses hpPerIcon = 50 by default in HUD)
 let playerHP = 150, playerMaxHP = 150;
 let playerMana = 40, playerMaxMana = 100;
+
+// player attributes (base values, can be modified by equipment/weapons)
+let playerAttributes = {
+  attk: 5,           // attack
+  deff: 5,           // defense
+  maxHp: 150,        // max health (50 points per icon)
+  maxMp: 150,        // max mana (50 points per icon)
+  attkSpeed: 0,      // attack speed
+  thorn: 0,          // thorn damage
+  poisonDmg: 0,      // poison damage
+  fireDmg: 0,        // fire damage
+  coldDmg: 0,        // cold damage
+  bleeding: 0,       // bleeding damage
+  burning: 0,        // burning damage
+  freezing: 0        // freezing damage
+};
+
 // instantiate HUD (outside of canvas)
 const hud = (window.HUD) ? new window.HUD({ hpPerIcon: 50, manaPerIcon: 25 }) : null;
 if (hud) { hud.setHP(playerHP, playerMaxHP); hud.setMana(playerMana, playerMaxMana); }
 // inventory state (health potions, mana potions, keys)
 let inventory = { healthPotion: 2, manaPotion: 2, keys: 0 };
 if (hud) hud.setInventory(inventory);
+
+// expose player attributes to inventory panel
+window.playerAttributes = playerAttributes;
 // expose hud reference so inventory panel can sync counts
 if (hud) window.hud = hud;
 
