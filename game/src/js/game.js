@@ -31,6 +31,76 @@ canvas.width = WIDTH * TILE; canvas.height = HEIGHT * TILE;
   });
 })();
 
+// Create a small debug log panel on the right side of the canvas
+(function createDebugPanel() {
+  const maxLines = 500;
+  const panel = document.createElement('div');
+  panel.id = 'debug-panel';
+  Object.assign(panel.style, {
+    position: 'fixed', right: '8px', top: '64px', width: '300px', height: '320px',
+    background: 'rgba(0,0,0,0.72)', color: '#fff', fontFamily: 'monospace', fontSize: '12px',
+    padding: '8px', overflowY: 'auto', zIndex: 99998, borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.6)'
+  });
+
+  const header = document.createElement('div');
+  header.style.display = 'flex'; header.style.justifyContent = 'space-between'; header.style.alignItems = 'center'; header.style.marginBottom = '6px';
+  const title = document.createElement('strong'); title.textContent = 'Debug Log'; title.style.fontSize = '12px';
+  const controls = document.createElement('div');
+  const clearBtn = document.createElement('button'); clearBtn.textContent = 'Clear'; clearBtn.title = 'Clear logs';
+  Object.assign(clearBtn.style, { marginLeft: '6px', fontSize: '11px' });
+  const toggleBtn = document.createElement('button'); toggleBtn.textContent = '▣'; toggleBtn.title = 'Toggle';
+  Object.assign(toggleBtn.style, { marginLeft: '6px', fontSize: '11px' });
+  controls.appendChild(clearBtn); controls.appendChild(toggleBtn);
+  header.appendChild(title); header.appendChild(controls);
+  panel.appendChild(header);
+
+  const content = document.createElement('div'); content.id = 'debug-panel-content'; panel.appendChild(content);
+  document.body.appendChild(panel);
+
+  function formatTs(d) { return d.toTimeString().split(' ')[0]; }
+  function appendLine(msg, level = 'info') {
+    const el = document.createElement('div');
+    el.textContent = `[${formatTs(new Date())}] ${msg}`;
+    el.style.whiteSpace = 'pre-wrap';
+    if (level === 'error') el.style.color = '#ff9b9b';
+    else if (level === 'warn') el.style.color = '#ffd59b';
+    content.appendChild(el);
+    while (content.children.length > maxLines) content.removeChild(content.firstChild);
+    content.scrollTop = content.scrollHeight;
+  }
+
+  window.debugLog = function (msg, level = 'info') {
+    try { appendLine(String(msg), level); } catch (e) { /* ignore */ }
+    // still forward to console
+    if (level === 'error') console.error(msg);
+    else if (level === 'warn') console.warn(msg);
+    else console.log(msg);
+  };
+
+  clearBtn.addEventListener('click', () => { content.innerHTML = ''; });
+  let visible = true;
+  toggleBtn.addEventListener('click', () => {
+    visible = !visible;
+    content.style.display = visible ? 'block' : 'none';
+    panel.style.height = visible ? '320px' : '28px';
+  });
+
+  // Capture console.* calls and mirror them into the panel
+  const orig = { log: console.log.bind(console), warn: console.warn.bind(console), error: console.error.bind(console) };
+  console.log = function (...args) { try { window.debugLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'info'); } catch (e) { }
+    orig.log(...args);
+  };
+  console.warn = function (...args) { try { window.debugLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'warn'); } catch (e) { }
+    orig.warn(...args);
+  };
+  console.error = function (...args) { try { window.debugLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'error'); } catch (e) { }
+    orig.error(...args);
+  };
+
+  // expose for debug/testing
+  window._debugPanel = { panel, content, appendLine };
+})();
+
 Input.init();
 const map = generateMap(WIDTH, HEIGHT, 0.18);
 const spriteAPI = new SpriteAPI(ctx, 1);
@@ -57,9 +127,28 @@ function findFreeTile(map, preferred) {
 const playerSpawn = findFreeTile(map, { x: 2, y: 2 });
 const player = new Player(playerSpawn.x, playerSpawn.y, WitchSprite);
 
-// static knight enemy (placed in the room) with simple patrol between two points; ensure free spawn
-const knightSpawn = findFreeTile(map, { x: 6, y: 6 });
-const knight = (window.Enemy && window.knightSprite) ? new window.Enemy(knightSpawn.x, knightSpawn.y, window.knightSprite, 50, 50, [{ x: knightSpawn.x, y: knightSpawn.y }, { x: Math.min(WIDTH - 2, knightSpawn.x + 4), y: knightSpawn.y }]) : null;
+// static golem enemy (placed in the room) with simple patrol between two points; ensure free spawn
+const golemSpawn = findFreeTile(map, { x: 6, y: 6 });
+// central enemy manager
+const enemyManager = new window.EnemyManager();
+// spawn golem via manager (will use pixel sprite or mapped PNGs)
+let golem = enemyManager.spawn('golem.basic', golemSpawn.x, golemSpawn.y, { hp: 50, damage: 50, patrolPoints: [{ x: golemSpawn.x, y: golemSpawn.y }, { x: Math.min(WIDTH - 2, golemSpawn.x + 4), y: golemSpawn.y }] });
+
+// wire death callback so drops are spawned centrally
+enemyManager.onDeath = function (enemy) {
+  try {
+    const drop = { x: enemy.x, y: enemy.y, type: 'health', spriteName: 'HealthPotionSprite', sprite: window.HealthPotionSprite || null };
+    items.push(drop);
+    if (window.debugLog) window.debugLog(`EnemyManager: dropped ${drop.type} at (${drop.x},${drop.y})`, 'info');
+  } catch (e) { console.error('EnemyManager onDeath failed', e); }
+};
+
+// Debug: check golem and resources
+setTimeout(() => {
+  console.info('Debug: golem instance ->', golem);
+  console.info('Debug: window.golemSprite ->', window.golemSprite ? window.golemSprite.id : null);
+  console.info('Debug: golem image frames loaded ->', !!(window._spriteImagesLoaded && window._spriteImagesLoaded['golem.basic']), (window.getSpriteImages ? window.getSpriteImages('golem.basic') : null) ? window.getSpriteImages('golem.basic').map(i => !!i) : null);
+}, 600);
 
 // items dropped in the level (e.g., potions)
 const items = []; // { x, y, type, sprite }
@@ -86,15 +175,15 @@ canvas.addEventListener('mousedown', (ev) => {
   }
 });
 
-// spawn a few chests on the map (avoid player/knight positions)
+// spawn a few chests on the map (avoid player/golem positions)
 function placeChests(count = 2) {
   for (let i = 0; i < count; i++) {
     let tries = 0;
     while (tries++ < 400) {
       const pos = findFreeTile(map);
-      // avoid player/knight and other chests
+      // avoid player/enemy and other chests
       if (pos.x === player.x && pos.y === player.y) continue;
-      if (knight && pos.x === knight.x && pos.y === knight.y) continue;
+      if (enemyManager && enemyManager.findAt(pos.x, pos.y)) continue;
       if (chests.some(c => c.x === pos.x && c.y === pos.y)) continue;
       chests.push({ x: pos.x, y: pos.y, opened: false });
       break;
@@ -126,6 +215,16 @@ SpriteLoader.load([
     console.warn('Chest images missing or failed to load:', missing);
   }
 });
+
+// load sprite map images (PNG replacements) and register them
+if (window.loadSpriteMap) {
+  try {
+    window.loadSpriteMap(window.SpriteMap || {}).then(() => {
+      if (window.debugLog) window.debugLog('SpriteMap loaded', 'info');
+      try { instantiateGolem(); } catch (e) { /* ignore */ }
+    });
+  } catch (e) { /* ignore */ }
+}
 
 let lastMove = 0;
 // player stats (HP uses hpPerIcon = 50 by default in HUD)
@@ -216,28 +315,30 @@ function update() {
     else if (Input.isDown('arrowdown') || Input.isDown('s')) { player.move(0, 1, map); lastMove = now; }
   }
 
-  // enemy touch damage (knight)
-  // player attack: F = strike adjacent enemy for 50
+  // enemy touch damage & player attack: F = strike adjacent enemy for 50
   if (!window._attackCooldown) window._attackCooldown = 0;
   if (now - window._attackCooldown > 220) {
-    if (Input.isDown('f') && knight && knight.alive) {
-      const manhattan = Math.abs(player.x - knight.x) + Math.abs(player.y - knight.y);
-      if (manhattan === 1) {
-        knight.takeDamage(50);
-        // if knight died this hit, spawn a health potion where it died
-        if (!knight.alive) {
-          const drop = { x: knight.x, y: knight.y, type: 'health', spriteName: 'HealthPotionSprite', sprite: window.HealthPotionSprite || null };
-          items.push(drop);
+    if (Input.isDown('f')) {
+      // find first adjacent alive enemy
+      let attacked = false;
+      if (enemyManager) {
+        for (let en of enemyManager.enemies) {
+          if (!en || !en.alive) continue;
+          const manhattan = Math.abs(player.x - en.x) + Math.abs(player.y - en.y);
+          if (manhattan === 1) { en.takeDamage(50); attacked = true; break; }
         }
-        window._attackCooldown = now;
       }
+      if (attacked) window._attackCooldown = now;
     }
   }
 
-  // enemy touch damage (knight) - adjacency hitbox
-  if (knight && knight.alive) {
-    if (knight.tryTouch(player, now)) {
-      playerHP = Math.max(0, playerHP - knight.damage);
+  // enemy touch damage - check all enemies
+  if (enemyManager) {
+    for (let en of enemyManager.enemies) {
+      if (!en || !en.alive) continue;
+      if (en.tryTouch(player, now)) {
+        playerHP = Math.max(0, playerHP - en.damage);
+      }
     }
   }
 
@@ -302,15 +403,13 @@ function update() {
     if (!p || !p.alive) { projectiles.splice(i, 1); continue; }
     p.update(now, map);
     if (!p.alive) { projectiles.splice(i, 1); continue; }
-    // check collision with knight
-    if (knight && knight.alive && p.x === knight.x && p.y === knight.y) {
-      knight.takeDamage(p.damage);
+    // check collision with any enemy at projectile location
+    const hit = enemyManager ? enemyManager.findAt(p.x, p.y) : null;
+    if (hit) {
+      hit.takeDamage(p.damage);
       p.alive = false;
       projectiles.splice(i, 1);
-      if (!knight.alive) {
-        const drop = { x: knight.x, y: knight.y, type: 'health', spriteName: 'HealthPotionSprite', sprite: window.HealthPotionSprite || null };
-        items.push(drop);
-      }
+      // drops on death are handled centrally by EnemyManager.onDeath
     }
   }
 }
@@ -328,11 +427,10 @@ function draw() {
       }
     }
   }
-  // draw enemy (patrolling)
-  if (knight) {
-    // update enemy movement
-    if (typeof knight.update === 'function') knight.update(Date.now(), map);
-    if (knight.alive) knight.draw(spriteAPI, TILE);
+  // draw & update enemies via EnemyManager
+  if (enemyManager) {
+    enemyManager.update(Date.now(), map);
+    enemyManager.draw(spriteAPI, TILE);
   }
 
   // draw items on ground
@@ -390,6 +488,24 @@ function draw() {
   player.draw(ctx, player.x * TILE, player.y * TILE, TILE, spriteAPI);
   // update DOM HUD
   if (hud) { hud.setHP(playerHP, playerMaxHP); hud.setMana(playerMana, playerMaxMana); }
+
+
+
+  // debug overlay showing golem status
+  try {
+    const gs = golem ? (golem.alive ? 'alive' : 'dead') : 'missing';
+    const gx = golem ? golem.x : '-';
+    const gy = golem ? golem.y : '-';
+    const gi = (window._spriteImagesLoaded && window._spriteImagesLoaded['golem.basic']) ? 'imgs' : 'noimgs';
+    ctx.save();
+    ctx.font = '10px monospace';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(6,6,180,40);
+    ctx.fillStyle = '#fff'; ctx.fillText(`Golem: ${gs} (${gx},${gy}) ${gi}`, 10, 20);
+    if (golem && golem.sprite) ctx.fillText(`Sprite id: ${golem.sprite.id}`, 10, 34);
+    ctx.restore();
+  } catch (e) { /* ignore */ }
+
+
 }
 
 function loop() { update(); draw(); requestAnimationFrame(loop); }

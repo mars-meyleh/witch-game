@@ -309,6 +309,27 @@ class SpriteAPI {
       paletteList = [Palette[sprite.palette] || {}];
     }
 
+    // If there is a mapped PNG for this sprite id, prefer drawing the PNG frames
+    try {
+      if (sprite && sprite.id && window.getSpriteImages) {
+        const imgs = window.getSpriteImages(sprite.id);
+        const loaded = window._spriteImagesLoaded && window._spriteImagesLoaded[sprite.id];
+        const mapEntry = window.SpriteMap && window.SpriteMap[sprite.id];
+        if (imgs && imgs.length && loaded) {
+          const frameDuration = (mapEntry && mapEntry.frameDuration) ? mapEntry.frameDuration : 320;
+          const idx = Math.floor(Date.now() / frameDuration) % imgs.length;
+          const img = imgs[idx];
+          if (img) {
+            this.ctx.imageSmoothingEnabled = false;
+            this.ctx.drawImage(img, x, y, size, size);
+            return;
+          }
+        }
+        // if images are provided but not loaded, and the mapping explicitly disallows fallback, do nothing
+        if (imgs && imgs.length && !loaded && mapEntry && mapEntry.noFallback) return;
+      }
+    } catch (e) { /* ignore */ }
+
     for (let y0 = 0; y0 < size; y0++) {
       for (let x0 = 0; x0 < size; x0++) {
         const sx = flip ? (size - 1 - x0) : x0;

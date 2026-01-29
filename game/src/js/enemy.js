@@ -21,6 +21,7 @@ class Enemy {
     if (!this.sprite || !spriteAPI || !this.alive) return;
     const px = this.x * tileSize;
     const py = this.y * tileSize;
+    // delegate drawing to SpriteAPI which will prefer PNGs if mapped
     spriteAPI.draw(this.sprite, px, py, false);
   }
 
