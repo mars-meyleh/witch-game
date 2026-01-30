@@ -61,60 +61,61 @@ window.Enemy = Enemy;
 // Simple EnemyManager placed here so all enemy control lives in this file.
 
 class EnemyManager {
-  constructor() {
+  constructor(gameState) {
+    this.gameState = gameState || window.GameState;
     this.enemies = [];
     this.map = null;
     this.tileSize = 16;
     this._inited = false;
     this._loop = this._loop.bind(this);
-    // try to initialize (will poll for game globals)
     this.init();
-    if (window.GameState) window.GameState.enemyManager = this;
+    if (this.gameState) this.gameState.enemyManager = this;
   }
 
   init() {
     if (this._inited) return;
-    const gs = window.GameState;
-    if (!((gs && gs.map) || window.gameMap) || !((gs && gs.ctx) || window.ctx)) {
+    const gs = this.gameState;
+    if (!(gs && gs.map) || !(gs && gs.ctx)) {
       setTimeout(() => this.init(), 200);
       return;
     }
-    this.map = (gs && gs.map) ? gs.map : window.gameMap;
-    this.tileSize = (gs && gs.TILE) ? gs.TILE : (window.TILE || 16);
+    this.map = gs.map;
+    this.tileSize = gs.TILE;
     this._inited = true;
     requestAnimationFrame(this._loop);
   }
 
   spawn(id, x, y, opts = {}) {
-    const sprite = (window.SpriteMap && window.SpriteMap[id]) ? window.SpriteMap[id] : (window[id] || null);
-    const e = new Enemy(x, y, sprite, opts.hp || 50, opts.damage || 50, opts.patrolPoints || null);
+    const spriteManager = this.gameState.spriteManager;
+    const sprite = (spriteManager && spriteManager.get(id)) ? spriteManager.get(id) : null;
+    const e = new Enemy(x, y, sprite, opts.health || 50, opts.damage || 50, opts.patrolPoints || null);
     e.id = id;
     this.enemies.push(e);
     return e;
   }
 
   findAt(x, y) {
-    return this.enemies.find(e => e && e.alive && e.x === x && e.y === y) || null;
+    return this.enemies.find(enemy => enemy && enemy.alive && enemy.x === x && enemy.y === y) || null;
   }
 
   update(now = Date.now(), map = null) {
     if (!this._inited) return;
     const m = map || this.map;
-    for (let en of this.enemies) {
-      if (!en || !en.alive) continue;
-      en.update(now, m);
+    for (let enemy of this.enemies) {
+      if (!enemy || !enemy.alive) continue;
+      enemy.update(now, m);
     }
 
-    // handle projectile collisions (projectiles are created by Player and exposed as window.projectiles)
-    const projectiles = (window.GameState && window.GameState.projectiles) ? window.GameState.projectiles : window.projectiles;
+    // handle projectile collisions
+    const projectiles = this.gameState.projectiles;
     if (projectiles && projectiles.length) {
       for (let i = projectiles.length - 1; i >= 0; i--) {
-        const p = projectiles[i];
-        if (!p || !p.alive) continue;
-        const hit = this.findAt(p.x, p.y);
+        const projectile = projectiles[i];
+        if (!projectile || !projectile.alive) continue;
+        const hit = this.findAt(projectile.x, projectile.y);
         if (hit) {
-          hit.takeDamage(p.damage || 0);
-          p.alive = false;
+          hit.takeDamage(projectile.damage || 0);
+          projectile.alive = false;
           projectiles.splice(i, 1);
           if (!hit.alive) this._onDeath(hit);
         }
@@ -122,12 +123,12 @@ class EnemyManager {
     }
   }
 
-  draw(ctx = null, tileSize = null) {
-    const c = ctx || window.ctx;
+  draw(canvasContext = null, tileSize = null) {
+    const ctx = canvasContext || (this.gameState && this.gameState.ctx);
     const ts = tileSize || this.tileSize;
-    for (let en of this.enemies) {
-      if (!en) continue;
-      en.draw(c, ts);
+    for (let enemy of this.enemies) {
+      if (!enemy) continue;
+      enemy.draw(ctx, ts);
     }
   }
 
@@ -138,14 +139,15 @@ class EnemyManager {
     requestAnimationFrame(this._loop);
   }
 
-  _onDeath(en) {
-    const items = (window.GameState && window.GameState.items) ? window.GameState.items : (window.items || []);
+  _onDeath(enemy) {
+    const items = this.gameState.items;
+    const spriteManager = this.gameState.spriteManager;
     // Drop mushroom or lunar fruit (placeholder: heart/star PNG)
     const isMushroom = Math.random() < 0.5;
     const type = isMushroom ? 'mushroom' : 'lunarfruit';
     const spriteName = isMushroom ? 'heartSprite' : 'starSprite';
-    items.push({ x: en.x, y: en.y, type, spriteName, sprite: window[spriteName] || null });
+    items.push({ x: enemy.x, y: enemy.y, type, spriteName, sprite: spriteManager.get(spriteName) });
   }
 }
 
-window.enemyManager = new EnemyManager();
+if (window.GameState) window.GameState.enemyManager = new EnemyManager(window.GameState);

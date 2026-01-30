@@ -201,7 +201,7 @@ async function initGame() {
     }
     golemPositions.push(pos);
     let patrol = [{ x: pos.x, y: pos.y }, { x: Math.min(GameState.WIDTH - 2, pos.x + 4), y: pos.y }];
-    let golem = enemyManager.spawn('golem.basic', pos.x, pos.y, { hp: 50, damage: 50, patrolPoints: patrol });
+    let golem = GameState.enemyManager.spawn('golem.basic', pos.x, pos.y, { health: 50, damage: 50, patrolPoints: patrol });
     if (golem) golem.sprite = GameState.spriteManager.get('GolemSprite');
   }
 
@@ -217,7 +217,7 @@ async function initGame() {
       while (tries++ < 400) {
         const pos = findFreeTile(GameState.map);
         if (pos.x === player.x && pos.y === player.y) continue;
-        if (enemyManager && enemyManager.findAt(pos.x, pos.y)) continue;
+        if (GameState.enemyManager && GameState.enemyManager.findAt(pos.x, pos.y)) continue;
         if (GameState.chests.some(c => c.x === pos.x && c.y === pos.y)) continue;
         GameState.chests.push({ x: pos.x, y: pos.y, opened: false });
         break;
@@ -384,9 +384,9 @@ async function initGame() {
         }
       }
     }
-    if (enemyManager) {
-      enemyManager.update(Date.now(), GameState.map);
-      enemyManager.draw(GameState.ctx, GameState.TILE);
+    if (GameState.enemyManager) {
+      GameState.enemyManager.update(Date.now(), GameState.map);
+      GameState.enemyManager.draw(GameState.ctx, GameState.TILE);
     }
     for (let c of GameState.chests) {
       if (!c) continue;
