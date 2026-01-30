@@ -92,7 +92,13 @@
 
     // inventory methods
     setInventory(inv) {
-      this.inventory = Object.assign(this.inventory || {}, inv);
+      // Prefer GameState.inventory if available
+      const gs = window.GameState;
+      if (gs && gs.inventory) {
+        this.inventory = Object.assign(this.inventory || {}, gs.inventory);
+      } else {
+        this.inventory = Object.assign(this.inventory || {}, inv);
+      }
       this._renderInventory();
     }
 

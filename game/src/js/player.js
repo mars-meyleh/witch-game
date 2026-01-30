@@ -65,10 +65,15 @@ class Player {
     const dx = dir === 'left' ? -1 : 1;
     const sx = this.x + dx, sy = this.y;
     if (window.gameMap && window.gameMap[sy] && window.gameMap[sy][sx] === 0) {
-      const sprite = window.wattkSprite || null;
-      if (!window.projectiles) window.projectiles = [];
+      const sprite = (window.GameState && window.GameState.wattkSprite) ? window.GameState.wattkSprite : (window.wattkSprite || null);
+      let projectiles = (window.GameState && window.GameState.projectiles) ? window.GameState.projectiles : window.projectiles;
+      if (!projectiles) {
+        projectiles = [];
+        if (window.GameState) window.GameState.projectiles = projectiles;
+        else window.projectiles = projectiles;
+      }
       const proj = new Projectile(sx, sy, dir, sprite, 140, 50);
-      window.projectiles.push(proj);
+      projectiles.push(proj);
     }
   }
 

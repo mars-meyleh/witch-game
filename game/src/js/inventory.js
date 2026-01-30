@@ -335,28 +335,32 @@
       this.save();
       this._emitInventorySync();
       // --- Attribute and HUD update logic ---
-      if (window.playerAttributes) {
+      const GameState = window.GameState || {};
+      const playerAttributes = GameState.playerAttributes || window.playerAttributes;
+      if (playerAttributes) {
         // Reset to base values
         const base = { attk: 5, deff: 5, maxHp: 75, maxMp: 75, attkSpeed: 0, thorn: 0, poisonDmg: 0, fireDmg: 0, coldDmg: 0, bleeding: 0, burning: 0, freezing: 0 };
-        Object.assign(window.playerAttributes, base);
+        Object.assign(playerAttributes, base);
         // Apply bonuses from equipped items
         for (let s of this.equipSlots) {
           if (!s.spriteName) continue;
-          if (/hat/i.test(s.spriteName)) window.playerAttributes.maxMp += 25; // +1 star
-          if (/dress/i.test(s.spriteName)) window.playerAttributes.maxHp += 50; // +1 heart
+          if (/hat/i.test(s.spriteName)) playerAttributes.maxMp += 25; // +1 star
+          if (/dress/i.test(s.spriteName)) playerAttributes.maxHp += 50; // +1 heart
           if (/corset/i.test(s.spriteName)) {
-            window.playerAttributes.deff += 5;
-            window.playerAttributes.thorn += 5;
+            playerAttributes.deff += 5;
+            playerAttributes.thorn += 5;
           }
         }
         // Update HUD (hearts/stars)
         if (window.hud) {
-          window.hud.setHP(window.playerHP, window.playerAttributes.maxHp);
-          window.hud.setMana(window.playerMana, window.playerAttributes.maxMp);
+          const playerHP = (GameState.playerHP !== undefined) ? GameState.playerHP : window.playerHP;
+          const playerMana = (GameState.playerMana !== undefined) ? GameState.playerMana : window.playerMana;
+          window.hud.setHP(playerHP, playerAttributes.maxHp);
+          window.hud.setMana(playerMana, playerAttributes.maxMp);
         }
         // Update attribute panel
         if (window.inventoryPanel && typeof window.inventoryPanel.updateAttributes === 'function') {
-          window.inventoryPanel.updateAttributes(window.playerAttributes);
+          window.inventoryPanel.updateAttributes(playerAttributes);
         }
       }
       return true;
@@ -454,24 +458,28 @@
       }
       this._emitInventorySync();
       // --- Attribute and HUD update logic (for drag-and-drop) ---
-      if (window.playerAttributes) {
+      const GameState2 = window.GameState || {};
+      const playerAttributes2 = GameState2.playerAttributes || window.playerAttributes;
+      if (playerAttributes2) {
         const base = { attk: 5, deff: 5, maxHp: 75, maxMp: 75, attkSpeed: 0, thorn: 0, poisonDmg: 0, fireDmg: 0, coldDmg: 0, bleeding: 0, burning: 0, freezing: 0 };
-        Object.assign(window.playerAttributes, base);
+        Object.assign(playerAttributes2, base);
         for (let s of this.equipSlots) {
           if (!s.spriteName) continue;
-          if (/hat/i.test(s.spriteName)) window.playerAttributes.maxMp += 25;
-          if (/dress/i.test(s.spriteName)) window.playerAttributes.maxHp += 50;
+          if (/hat/i.test(s.spriteName)) playerAttributes2.maxMp += 25;
+          if (/dress/i.test(s.spriteName)) playerAttributes2.maxHp += 50;
           if (/corset/i.test(s.spriteName)) {
-            window.playerAttributes.deff += 5;
-            window.playerAttributes.thorn += 5;
+            playerAttributes2.deff += 5;
+            playerAttributes2.thorn += 5;
           }
         }
         if (window.hud) {
-          window.hud.setHP(window.playerHP, window.playerAttributes.maxHp);
-          window.hud.setMana(window.playerMana, window.playerAttributes.maxMp);
+          const playerHP = (GameState2.playerHP !== undefined) ? GameState2.playerHP : window.playerHP;
+          const playerMana = (GameState2.playerMana !== undefined) ? GameState2.playerMana : window.playerMana;
+          window.hud.setHP(playerHP, playerAttributes2.maxHp);
+          window.hud.setMana(playerMana, playerAttributes2.maxMp);
         }
         if (window.inventoryPanel && typeof window.inventoryPanel.updateAttributes === 'function') {
-          window.inventoryPanel.updateAttributes(window.playerAttributes);
+          window.inventoryPanel.updateAttributes(playerAttributes2);
         }
       }
     }

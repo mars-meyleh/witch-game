@@ -1,12 +1,40 @@
-const TILE = 16;
-const WIDTH = 20, HEIGHT = 15; // 320x240
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-// expose canvas context for external managers (enemy manager will use this)
-window.ctx = ctx;
-canvas.width = WIDTH * TILE; canvas.height = HEIGHT * TILE;
-window.TILE = TILE;
-window.WIDTH = WIDTH; window.HEIGHT = HEIGHT;
+
+// Centralized game state object
+const GameState = {
+  TILE: 16,
+  WIDTH: 20,
+  HEIGHT: 15,
+  canvas: null,
+  ctx: null,
+  map: null,
+  player: null,
+  playerHP: 150,
+  playerMaxHP: 150,
+  playerMana: 25,
+  playerMaxMana: 75,
+  playerAttributes: null,
+  inventory: null,
+  items: [],
+  projectiles: [],
+  chests: [],
+  hud: null,
+  enemyManager: null,
+  wattkSprite: null,
+  _chestImages: null,
+  _chestImagesLoaded: false,
+  _testKeyCooldown: 0,
+  _chestCooldown: 0
+};
+window.GameState = GameState;
+
+GameState.canvas = document.getElementById('game');
+GameState.ctx = GameState.canvas.getContext('2d');
+window.ctx = GameState.ctx;
+GameState.canvas.width = GameState.WIDTH * GameState.TILE;
+GameState.canvas.height = GameState.HEIGHT * GameState.TILE;
+window.TILE = GameState.TILE;
+window.WIDTH = GameState.WIDTH;
+window.HEIGHT = GameState.HEIGHT;
 
 // Global error overlay to surface runtime errors (helps debugging when game won't load)
 (function () {
@@ -105,15 +133,16 @@ window.WIDTH = WIDTH; window.HEIGHT = HEIGHT;
   window._debugPanel = { panel, content, appendLine };
 })();
 
+
 Input.init();
-const map = generateMap(WIDTH, HEIGHT, 0.18);
-// expose map for external managers
-window.gameMap = map;
+GameState.map = generateMap(GameState.WIDTH, GameState.HEIGHT, 0.18);
+window.gameMap = GameState.map;
+
 
 // Load all sprites at startup (ASYNC - waits for all images to load)
 async function initGame() {
-    // Set witch projectile sprite to star
-    window.wattkSprite = window.starSprite || null;
+  // Set witch projectile sprite to star
+  GameState.wattkSprite = window.starSprite || null;
   try {
     await SpriteLoader.load({
       WitchSprite: 'src/assets/sprites/witch/witch.png',
@@ -132,8 +161,6 @@ async function initGame() {
   } catch (err) {
     console.warn('Sprite loading error:', err);
   }
-  
-  // Continue game initialization AFTER sprites are loaded
 
   // helper: find a free (non-wall) tile in the map. If preferred provided, try that first.
   function findFreeTile(map, preferred) {
@@ -142,73 +169,64 @@ async function initGame() {
     if (preferred && preferred.x >= 0 && preferred.x < W && preferred.y >= 0 && preferred.y < H) {
       if (map[preferred.y][preferred.x] === 0) return { x: preferred.x, y: preferred.y };
     }
-    // try random probes
     for (let i = 0; i < 300; i++) {
       const x = 1 + Math.floor(Math.random() * (W - 2));
       const y = 1 + Math.floor(Math.random() * (H - 2));
       if (map[y][x] === 0) return { x, y };
     }
-    // fallback: scan for first non-wall
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (map[y][x] === 0) return { x, y };
     return { x: 1, y: 1 };
   }
 
   // spawn player on a free tile
-  const playerSpawn = findFreeTile(map, { x: 2, y: 2 });
+  const playerSpawn = findFreeTile(GameState.map, { x: 2, y: 2 });
   const player = new Player(playerSpawn.x, playerSpawn.y, window.WitchSprite || null);
-  window.player = player; // expose to global
-  // attach input handlers (mouse + movement/keys) on player
-  if (typeof player.initInput === 'function') player.initInput(canvas);
+  GameState.player = player;
+  window.player = player;
+  if (typeof player.initInput === 'function') player.initInput(GameState.canvas);
 
-  // chest objects (must be declared before golem spawn logic)
-  const chests = []; // { x,y, opened }
+  // chest objects
+  GameState.chests = [];
 
-  // static golem enemy (placed in the room) with simple patrol between two points; ensure free spawn
   // spawn 6 golems at random, valid positions
   const golemPositions = [];
   for (let i = 0; i < 6; i++) {
     let tries = 0, pos;
     while (tries++ < 400) {
-      pos = findFreeTile(map);
-      // avoid player, chests, and other golems
+      pos = findFreeTile(GameState.map);
       if (pos.x === player.x && pos.y === player.y) continue;
-      if (chests.some(c => c.x === pos.x && c.y === pos.y)) continue;
+      if (GameState.chests.some(c => c.x === pos.x && c.y === pos.y)) continue;
       if (golemPositions.some(gp => gp.x === pos.x && gp.y === pos.y)) continue;
       break;
     }
     golemPositions.push(pos);
-    let patrol = [{ x: pos.x, y: pos.y }, { x: Math.min(WIDTH - 2, pos.x + 4), y: pos.y }];
+    let patrol = [{ x: pos.x, y: pos.y }, { x: Math.min(GameState.WIDTH - 2, pos.x + 4), y: pos.y }];
     let golem = enemyManager.spawn('golem.basic', pos.x, pos.y, { hp: 50, damage: 50, patrolPoints: patrol });
     if (golem && window.GolemSprite) golem.sprite = window.GolemSprite;
   }
 
+  // items dropped in the level
+  GameState.items = [];
+  GameState.projectiles = [];
+  window.projectiles = GameState.projectiles;
 
-  // items dropped in the level (e.g., potions)
-  const items = []; // { x, y, type, sprite }
-  // active projectiles
-  const projectiles = [];
-  window.projectiles = projectiles; // expose for EnemyManager
-
-  // player firing moved into `Player` (see player.initInput and player.update)
-
-  // spawn a few chests on the map (avoid player/golem positions)
+  // spawn a few chests on the map
   function placeChests(count = 2) {
     for (let i = 0; i < count; i++) {
       let tries = 0;
       while (tries++ < 400) {
-        const pos = findFreeTile(map);
-        // avoid player/enemy and other chests
+        const pos = findFreeTile(GameState.map);
         if (pos.x === player.x && pos.y === player.y) continue;
         if (enemyManager && enemyManager.findAt(pos.x, pos.y)) continue;
-        if (chests.some(c => c.x === pos.x && c.y === pos.y)) continue;
-        chests.push({ x: pos.x, y: pos.y, opened: false });
+        if (GameState.chests.some(c => c.x === pos.x && c.y === pos.y)) continue;
+        GameState.chests.push({ x: pos.x, y: pos.y, opened: false });
         break;
       }
     }
   }
   placeChests(2);
 
-  // load chest images (3-frame opening animation)
+  // load chest images
   await (async function loadChestImages() {
     const paths = [
       'src/assets/sprites/chest/chest-closed.png',
@@ -226,10 +244,12 @@ async function initGame() {
           });
         }).catch(() => null)
       ));
-      window._chestImages = images;
-      window._chestImagesLoaded = images.every(img => img !== null && img !== undefined);
-      if (window._chestImagesLoaded) {
-        console.info('Chest images loaded:', window._chestImages.length, 'frames');
+      GameState._chestImages = images;
+      GameState._chestImagesLoaded = images.every(img => img !== null && img !== undefined);
+      window._chestImages = GameState._chestImages;
+      window._chestImagesLoaded = GameState._chestImagesLoaded;
+      if (GameState._chestImagesLoaded) {
+        console.info('Chest images loaded:', GameState._chestImages.length, 'frames');
       } else {
         console.warn('Some chest images failed to load');
       }
@@ -238,81 +258,62 @@ async function initGame() {
     }
   })();
 
+  // player stats
+  GameState.playerHP = 150; GameState.playerMaxHP = 150;
+  GameState.playerMana = 25; GameState.playerMaxMana = 75;
 
-  let lastMove = 0;
-  // player stats (HP uses hpPerIcon = 50 by default in HUD)
-  window.playerHP = 150; window.playerMaxHP = 150;
-  window.playerMana = 25; window.playerMaxMana = 75;
-
-  // player attributes (base values, can be modified by equipment/weapons)
-  let playerAttributes = {
-    attk: 5,           // attack
-    deff: 5,           // defense
-    maxHp: 150,        // max health (50 points per icon)
-    maxMp: 150,        // max mana (50 points per icon)
-    attkSpeed: 0,      // attack speed
-    thorn: 0,          // thorn damage
-    poisonDmg: 0,      // poison damage
-    fireDmg: 0,        // fire damage
-    coldDmg: 0,        // cold damage
-    bleeding: 0,       // bleeding damage
-    burning: 0,        // burning damage
-    freezing: 0        // freezing damage
+  // player attributes
+  GameState.playerAttributes = {
+    attk: 5, deff: 5, maxHp: 150, maxMp: 150, attkSpeed: 0, thorn: 0, poisonDmg: 0, fireDmg: 0, coldDmg: 0, bleeding: 0, burning: 0, freezing: 0
   };
+  window.playerAttributes = GameState.playerAttributes;
 
-  // instantiate HUD (outside of canvas)
+  // instantiate HUD
   const hud = (window.HUD) ? new window.HUD({ hpPerIcon: 50, manaPerIcon: 25 }) : null;
+  GameState.hud = hud;
   if (hud) {
-    hud.setHP(window.playerHP, window.playerMaxHP);
-    hud.setMana(window.playerMana, window.playerMaxMana);
-    // assign loaded sprites
+    hud.setHP(GameState.playerHP, GameState.playerMaxHP);
+    hud.setMana(GameState.playerMana, GameState.playerMaxMana);
     if (window.heartSprite) hud.heartSprite = window.heartSprite;
     if (window.starSprite) hud.starSprite = window.starSprite;
     if (window.healthPotionSprite) hud.healthPotionSprite = window.healthPotionSprite;
     if (window.manaPotionSprite) hud.manaPotionSprite = window.manaPotionSprite;
   }
-  // inventory state (health potions, mana potions, keys)
-  let inventory = { healthPotion: 2, manaPotion: 2, keys: 0, equipment: [], equipmentSlots: { hat: null, corset: null, dress: null } };
-  if (hud) hud.setInventory(inventory);
 
-  // expose player attributes to inventory panel
-  window.playerAttributes = playerAttributes;
+  // inventory state
+  GameState.inventory = { healthPotion: 2, manaPotion: 2, keys: 0, equipment: [], equipmentSlots: { hat: null, corset: null, dress: null } };
+  if (hud) hud.setInventory(GameState.inventory);
+
   // expose hud reference so inventory panel can sync counts
   if (hud) window.hud = hud;
 
   // handler called by the InventoryPanel when its contents change
   window._onInventoryPanelChanged = function (counts) {
     if (!counts) return;
-    inventory.healthPotion = counts.healthPotion || 0;
-    inventory.manaPotion = counts.manaPotion || 0;
-    inventory.keys = counts.keys || 0;
-    if (window.hud && typeof window.hud.setInventory === 'function') window.hud.setInventory(inventory);
+    GameState.inventory.healthPotion = counts.healthPotion || 0;
+    GameState.inventory.manaPotion = counts.manaPotion || 0;
+    GameState.inventory.keys = counts.keys || 0;
+    if (window.hud && typeof window.hud.setInventory === 'function') window.hud.setInventory(GameState.inventory);
   };
-  // if panel already exists, ask it to emit its current counts so HUD syncs
   if (window.inventoryPanel && typeof window.inventoryPanel._emitInventorySync === 'function') window.inventoryPanel._emitInventorySync();
-  
-  // Define update and draw functions INSIDE async function so they have access to initialized variables
+
+  // Define update and draw functions
   window._update = function update() {
     const now = Date.now();
-    // test keys: O = enemy attack (50), P = boss attack (100)
-    if (!window._testKeyCooldown) window._testKeyCooldown = 0;
-    if (now - window._testKeyCooldown > 180) {
-      if (Input.isDown('o')) { window.playerHP = Math.max(0, window.playerHP - 50); window._testKeyCooldown = now; }
-      else if (Input.isDown('p')) { window.playerHP = Math.max(0, window.playerHP - 100); window._testKeyCooldown = now; }
+    if (!GameState._testKeyCooldown) GameState._testKeyCooldown = 0;
+    if (now - GameState._testKeyCooldown > 180) {
+      if (Input.isDown('o')) { GameState.playerHP = Math.max(0, GameState.playerHP - 50); GameState._testKeyCooldown = now; }
+      else if (Input.isDown('p')) { GameState.playerHP = Math.max(0, GameState.playerHP - 100); GameState._testKeyCooldown = now; }
     }
-    // inventory use keys: Q = use health potion, E = use mana potion
-    // delegate player-specific input (movement, attack, potions) to Player
-    if (player && typeof player.update === 'function') player.update(now, map);
+    if (GameState.player && typeof GameState.player.update === 'function') GameState.player.update(now, GameState.map);
 
     // pickup items if player stands on them
-    for (let i = items.length - 1; i >= 0; i--) {
-      const it = items[i];
-      if (it.x === player.x && it.y === player.y && Input.isDown('f')) {
-        // try to add to inventory panel first
+    for (let i = GameState.items.length - 1; i >= 0; i--) {
+      const it = GameState.items[i];
+      if (it.x === GameState.player.x && it.y === GameState.player.y && Input.isDown('f')) {
         let added = false;
         if (window.inventoryPanel && it.spriteName) {
           try { added = window.inventoryPanel.addItemByName(it.spriteName); } catch (e) { added = false; }
-          // Patch: force slot sprite assignment if missing
           if (window.inventoryPanel && window.inventoryPanel.invSlots) {
             for (let s of window.inventoryPanel.invSlots) {
               if (s.spriteName === it.spriteName && !s.sprite) s.sprite = window[it.spriteName] || null;
@@ -321,11 +322,11 @@ async function initGame() {
         }
         if (!added) {
           if (it.type === 'health') {
-            inventory.healthPotion = (inventory.healthPotion || 0) + 1;
-            if (hud) hud.setInventory(inventory);
+            GameState.inventory.healthPotion = (GameState.inventory.healthPotion || 0) + 1;
+            if (hud) hud.setInventory(GameState.inventory);
           } else if (it.type === 'mana') {
-            inventory.manaPotion = (inventory.manaPotion || 0) + 1;
-            if (hud) hud.setInventory(inventory);
+            GameState.inventory.manaPotion = (GameState.inventory.manaPotion || 0) + 1;
+            if (hud) hud.setInventory(GameState.inventory);
           } else if (it.type === 'mushroom' || it.type === 'lunarfruit') {
             if (window.inventoryPanel && it.spriteName) {
               window.inventoryPanel.addItemByName(it.spriteName);
@@ -336,40 +337,36 @@ async function initGame() {
               }
             }
           } else if (it.type === 'hat' || it.type === 'corset' || it.type === 'dress') {
-            if (!inventory.equipment) inventory.equipment = [];
-            inventory.equipment.push({ type: it.type, name: it.name, spriteName: it.spriteName, equipped: false });
-            if (hud) hud.setInventory(inventory);
+            if (!GameState.inventory.equipment) GameState.inventory.equipment = [];
+            GameState.inventory.equipment.push({ type: it.type, name: it.name, spriteName: it.spriteName, equipped: false });
+            if (hud) hud.setInventory(GameState.inventory);
           }
         }
         if (window.inventoryPanel && typeof window.inventoryPanel.render === 'function') {
           window.inventoryPanel.render();
         }
-        items.splice(i, 1);
+        GameState.items.splice(i, 1);
       }
     }
 
     // chest interaction: G to open adjacent or same-tile chest
-    if (!window._chestCooldown) window._chestCooldown = 0;
-    if (now - window._chestCooldown > 300) {
+    if (!GameState._chestCooldown) GameState._chestCooldown = 0;
+    if (now - GameState._chestCooldown > 300) {
       if (Input.isDown('g')) {
-        for (let c of chests) {
+        for (let c of GameState.chests) {
           if (c.opened) continue;
-          const man = Math.abs(player.x - c.x) + Math.abs(player.y - c.y);
+          const man = Math.abs(GameState.player.x - c.x) + Math.abs(GameState.player.y - c.y);
           if (man <= 1) {
             c.opened = true;
-            // record animation start time
             c.openStart = now;
-            // random potion: 50% health, 50% mana
-            // drop equipment: hat, corset, dress (random)
             const eqTypes = [
               { type: 'hat', name: 'Witch Hat', spriteName: 'hatSprite' },
               { type: 'corset', name: 'Corset', spriteName: 'corsetSprite' },
               { type: 'dress', name: 'Dress', spriteName: 'dressSprite' }
             ];
             const eq = eqTypes[Math.floor(Math.random() * eqTypes.length)];
-            // Spawn equipment as ground item at chest position
-            items.push({ x: c.x, y: c.y, type: eq.type, name: eq.name, spriteName: eq.spriteName, sprite: window[eq.spriteName] || null });
-            window._chestCooldown = now;
+            GameState.items.push({ x: c.x, y: c.y, type: eq.type, name: eq.name, spriteName: eq.spriteName, sprite: window[eq.spriteName] || null });
+            GameState._chestCooldown = now;
             break;
           }
         }
@@ -377,101 +374,80 @@ async function initGame() {
     }
 
     // update projectiles
-    for (let i = projectiles.length - 1; i >= 0; i--) {
-      const p = projectiles[i];
-      if (!p || !p.alive) { projectiles.splice(i, 1); continue; }
-      p.update(now, map);
-      if (!p.alive) { projectiles.splice(i, 1); continue; }
+    for (let i = GameState.projectiles.length - 1; i >= 0; i--) {
+      const p = GameState.projectiles[i];
+      if (!p || !p.alive) { GameState.projectiles.splice(i, 1); continue; }
+      p.update(now, GameState.map);
+      if (!p.alive) { GameState.projectiles.splice(i, 1); continue; }
     }
   };
 
   window._draw = function draw() {
-    for (let y = 0; y < HEIGHT; y++) {
-      for (let x = 0; x < WIDTH; x++) {
-        const tx = x * TILE, ty = y * TILE;
-        if (map[y][x] === 1) {
-          if (window.wallSprite && window.wallSprite instanceof Image) ctx.drawImage(window.wallSprite, tx, ty, TILE, TILE);
-          else { ctx.fillStyle = '#DAB6D8'; ctx.fillRect(tx, ty, TILE, TILE); }
+    for (let y = 0; y < GameState.HEIGHT; y++) {
+      for (let x = 0; x < GameState.WIDTH; x++) {
+        const tx = x * GameState.TILE, ty = y * GameState.TILE;
+        if (GameState.map[y][x] === 1) {
+          if (window.wallSprite && window.wallSprite instanceof Image) GameState.ctx.drawImage(window.wallSprite, tx, ty, GameState.TILE, GameState.TILE);
+          else { GameState.ctx.fillStyle = '#DAB6D8'; GameState.ctx.fillRect(tx, ty, GameState.TILE, GameState.TILE); }
         } else {
-          if (window.floorSprite && window.floorSprite instanceof Image) ctx.drawImage(window.floorSprite, tx, ty, TILE, TILE);
-          else { ctx.fillStyle = '#F6E7F2'; ctx.fillRect(tx, ty, TILE, TILE); }
+          if (window.floorSprite && window.floorSprite instanceof Image) GameState.ctx.drawImage(window.floorSprite, tx, ty, GameState.TILE, GameState.TILE);
+          else { GameState.ctx.fillStyle = '#F6E7F2'; GameState.ctx.fillRect(tx, ty, GameState.TILE, GameState.TILE); }
         }
       }
     }
-    // draw & update enemies via EnemyManager
     if (enemyManager) {
-      enemyManager.update(Date.now(), map);
-      enemyManager.draw(ctx, TILE);
+      enemyManager.update(Date.now(), GameState.map);
+      enemyManager.draw(GameState.ctx, GameState.TILE);
     }
-    // draw chests first
-    for (let c of chests) {
+    for (let c of GameState.chests) {
       if (!c) continue;
-      const chestImgs = (window._chestImages && window._chestImages.length) ? window._chestImages : null;
-      const chestImgsLoaded = window._chestImagesLoaded === true;
+      const chestImgs = (GameState._chestImages && GameState._chestImages.length) ? GameState._chestImages : null;
+      const chestImgsLoaded = GameState._chestImagesLoaded === true;
       if (c.opened) {
         if (chestImgs && chestImgsLoaded) {
-          // play opening animation: frames 0..N-1 over duration
-          const frameDuration = 120; // ms per frame
+          const frameDuration = 120;
           const elapsed = (c.openStart ? (Date.now() - c.openStart) : Infinity);
           const total = chestImgs.length * frameDuration;
           const idx = elapsed >= total ? (chestImgs.length - 1) : Math.floor(elapsed / frameDuration);
-          ctx.imageSmoothingEnabled = false;
+          GameState.ctx.imageSmoothingEnabled = false;
           const img = chestImgs[Math.max(0, Math.min(chestImgs.length - 1, idx))];
-          if (img) ctx.drawImage(img, c.x * TILE, c.y * TILE, TILE, TILE);
-          else ctx.fillStyle = '#C4A36A', ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+          if (img) GameState.ctx.drawImage(img, c.x * GameState.TILE, c.y * GameState.TILE, GameState.TILE, GameState.TILE);
+          else GameState.ctx.fillStyle = '#C4A36A', GameState.ctx.fillRect(c.x * GameState.TILE + 1, c.y * GameState.TILE + 4, GameState.TILE - 2, GameState.TILE - 8);
         } else if (chestImgs && !chestImgsLoaded) {
-          // images partially available or failed to load — warn once and fall back to rectangle
           if (!c._chestLoadWarned) { console.warn('Chest images not fully available; falling back to rectangle fallback.'); c._chestLoadWarned = true; }
-          ctx.fillStyle = '#C4A36A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+          GameState.ctx.fillStyle = '#C4A36A'; GameState.ctx.fillRect(c.x * GameState.TILE + 1, c.y * GameState.TILE + 4, GameState.TILE - 2, GameState.TILE - 8);
         } else {
-          ctx.fillStyle = '#C4A36A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+          GameState.ctx.fillStyle = '#C4A36A'; GameState.ctx.fillRect(c.x * GameState.TILE + 1, c.y * GameState.TILE + 4, GameState.TILE - 2, GameState.TILE - 8);
         }
       } else {
         if (chestImgs && chestImgsLoaded) {
-          // show closed frame (frame 0)
-          ctx.imageSmoothingEnabled = false;
+          GameState.ctx.imageSmoothingEnabled = false;
           const img = chestImgs[0];
-          if (img) ctx.drawImage(img, c.x * TILE, c.y * TILE, TILE, TILE);
-          else ctx.fillStyle = '#A66A2A', ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+          if (img) GameState.ctx.drawImage(img, c.x * GameState.TILE, c.y * GameState.TILE, GameState.TILE, GameState.TILE);
+          else GameState.ctx.fillStyle = '#A66A2A', GameState.ctx.fillRect(c.x * GameState.TILE + 1, c.y * GameState.TILE + 4, GameState.TILE - 2, GameState.TILE - 8);
         } else if (chestImgs && !chestImgsLoaded) {
           if (!c._chestLoadWarned) { console.warn('Chest images not fully available; falling back to rectangle fallback.'); c._chestLoadWarned = true; }
-          ctx.fillStyle = '#A66A2A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+          GameState.ctx.fillStyle = '#A66A2A'; GameState.ctx.fillRect(c.x * GameState.TILE + 1, c.y * GameState.TILE + 4, GameState.TILE - 2, GameState.TILE - 8);
         } else {
-          ctx.fillStyle = '#A66A2A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+          GameState.ctx.fillStyle = '#A66A2A'; GameState.ctx.fillRect(c.x * GameState.TILE + 1, c.y * GameState.TILE + 4, GameState.TILE - 2, GameState.TILE - 8);
         }
       }
     }
-    // draw items on top of chests
-    for (let it of items) {
+    for (let it of GameState.items) {
       if (it && !it.sprite && it.spriteName && window[it.spriteName]) it.sprite = window[it.spriteName];
-      if (it && it.sprite && it.sprite instanceof Image) ctx.drawImage(it.sprite, it.x * TILE, it.y * TILE, TILE, TILE);
+      if (it && it.sprite && it.sprite instanceof Image) GameState.ctx.drawImage(it.sprite, it.x * GameState.TILE, it.y * GameState.TILE, GameState.TILE, GameState.TILE);
       else {
-        // fallback: simple marker
-        ctx.fillStyle = '#FF8080'; ctx.fillRect(it.x * TILE + 4, it.y * TILE + 4, TILE - 8, TILE - 8);
+        GameState.ctx.fillStyle = '#FF8080'; GameState.ctx.fillRect(it.x * GameState.TILE + 4, it.y * GameState.TILE + 4, GameState.TILE - 8, GameState.TILE - 8);
       }
     }
-
-    // draw player
-    if (player && typeof player.draw === 'function') {
-      player.draw(ctx, player.x * TILE, player.y * TILE, TILE);
+    if (GameState.player && typeof GameState.player.draw === 'function') {
+      GameState.player.draw(GameState.ctx, GameState.player.x * GameState.TILE, GameState.player.y * GameState.TILE, GameState.TILE);
     }
-    try {
-      const gx = golem ? golem.x : '-';
-      const gy = golem ? golem.y : '-';
-      const gi = (window._spriteImagesLoaded && window._spriteImagesLoaded['golem.basic']) ? 'imgs' : 'noimgs';
-      ctx.save();
-      ctx.font = '10px monospace';
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(6,6,180,40);
-      ctx.fillStyle = '#fff'; ctx.fillText(`Golem: ${gs} (${gx},${gy}) ${gi}`, 10, 20);
-      if (golem && golem.sprite) ctx.fillText(`Sprite id: ${golem.sprite.id}`, 10, 34);
-      ctx.restore();
-    } catch (e) { /* ignore */ }
+    // ...existing code...
   };
 
-  // Start game loop now that all initialization is complete
   function loop() { window._update(); window._draw(); requestAnimationFrame(loop); }
   loop();
 }
 
-// Initialize the game (load sprites, spawn entities, start loop)
 initGame().catch(err => console.error('Game initialization failed:', err, err && err.stack ? err.stack : ''));
