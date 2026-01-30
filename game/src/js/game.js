@@ -25,16 +25,15 @@ const GameState = {
   _testKeyCooldown: 0,
   _chestCooldown: 0
 };
-window.GameState = GameState;
 
-GameState.canvas = document.getElementById('game');
-GameState.ctx = GameState.canvas.getContext('2d');
-window.ctx = GameState.ctx;
-GameState.canvas.width = GameState.WIDTH * GameState.TILE;
-GameState.canvas.height = GameState.HEIGHT * GameState.TILE;
-window.TILE = GameState.TILE;
-window.WIDTH = GameState.WIDTH;
-window.HEIGHT = GameState.HEIGHT;
+function setupGameState() {
+  GameState.canvas = document.getElementById('game');
+  GameState.ctx = GameState.canvas.getContext('2d');
+  GameState.canvas.width = GameState.WIDTH * GameState.TILE;
+  GameState.canvas.height = GameState.HEIGHT * GameState.TILE;
+}
+
+setupGameState();
 
 // Global error overlay to surface runtime errors (helps debugging when game won't load)
 (function () {
@@ -139,7 +138,6 @@ window.HEIGHT = GameState.HEIGHT;
 
 Input.init();
 GameState.map = generateMap(GameState.WIDTH, GameState.HEIGHT, 0.18);
-window.gameMap = GameState.map;
 
 
 // Load all sprites at startup (ASYNC - waits for all images to load)
@@ -185,7 +183,6 @@ async function initGame() {
   const playerSpawn = findFreeTile(GameState.map, { x: 2, y: 2 });
   const player = new Player(playerSpawn.x, playerSpawn.y, GameState.spriteManager.get('WitchSprite'));
   GameState.player = player;
-  window.player = player;
   if (typeof player.initInput === 'function') player.initInput(GameState.canvas);
 
   // chest objects
@@ -211,7 +208,6 @@ async function initGame() {
   // items dropped in the level
   GameState.items = [];
   GameState.projectiles = [];
-  window.projectiles = GameState.projectiles;
 
   // spawn a few chests on the map
   function placeChests(count = 2) {
@@ -249,8 +245,6 @@ async function initGame() {
       ));
       GameState._chestImages = images;
       GameState._chestImagesLoaded = images.every(img => img !== null && img !== undefined);
-      window._chestImages = GameState._chestImages;
-      window._chestImagesLoaded = GameState._chestImagesLoaded;
       if (GameState._chestImagesLoaded) {
         console.info('Chest images loaded:', GameState._chestImages.length, 'frames');
       } else {
@@ -269,7 +263,6 @@ async function initGame() {
   GameState.playerAttributes = {
     attack: 5, defense: 5, maxHealth: 150, maxMana: 150, attackSpeed: 0, thorn: 0, poisonDamage: 0, fireDamage: 0, coldDamage: 0, bleeding: 0, burning: 0, freezing: 0
   };
-  window.playerAttributes = GameState.playerAttributes;
 
   // instantiate HUD
   const hud = (window.HUD) ? new window.HUD({ hpPerIcon: 50, manaPerIcon: 25 }) : null;
@@ -281,17 +274,14 @@ async function initGame() {
     hud.starSprite = GameState.spriteManager.get('starSprite');
     hud.healthPotionSprite = GameState.spriteManager.get('healthPotionSprite');
     hud.manaPotionSprite = GameState.spriteManager.get('manaPotionSprite');
+    hud.setInventory(GameState.inventory);
   }
 
   // inventory state
   GameState.inventory = { healthPotion: 2, manaPotion: 2, keys: 0, equipment: [], equipmentSlots: { hat: null, corset: null, dress: null } };
-  if (hud) hud.setInventory(GameState.inventory);
-
-  // expose hud reference so inventory panel can sync counts
-  if (hud) window.hud = hud;
 
   // handler called by the InventoryManager when its contents change
-  window._onInventoryPanelChanged = function (counts) {
+  GameState.onInventoryPanelChanged = function (counts) {
     if (!counts) return;
     if (GameState.inventoryManager) GameState.inventoryManager.syncInventory();
   };

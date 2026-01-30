@@ -335,8 +335,8 @@
       this.save();
       this._emitInventorySync();
       // --- Attribute and HUD update logic ---
-      const GameState = window.GameState || {};
-      const playerAttributes = GameState.playerAttributes || window.playerAttributes;
+      import GameState from './game.js';
+      const playerAttributes = GameState.playerAttributes;
       if (playerAttributes) {
         // Reset to base values
         const base = { attk: 5, deff: 5, maxHp: 75, maxMp: 75, attkSpeed: 0, thorn: 0, poisonDmg: 0, fireDmg: 0, coldDmg: 0, bleeding: 0, burning: 0, freezing: 0 };
@@ -352,15 +352,13 @@
           }
         }
         // Update HUD (hearts/stars)
-        if (window.hud) {
-          const playerHP = (GameState.playerHP !== undefined) ? GameState.playerHP : window.playerHP;
-          const playerMana = (GameState.playerMana !== undefined) ? GameState.playerMana : window.playerMana;
-          window.hud.setHP(playerHP, playerAttributes.maxHp);
-          window.hud.setMana(playerMana, playerAttributes.maxMp);
+        if (GameState.hud) {
+          GameState.hud.setHP(GameState.playerHP, playerAttributes.maxHp);
+          GameState.hud.setMana(GameState.playerMana, playerAttributes.maxMp);
         }
         // Update attribute panel
-        if (window.inventoryPanel && typeof window.inventoryPanel.updateAttributes === 'function') {
-          window.inventoryPanel.updateAttributes(playerAttributes);
+        if (typeof this.updateAttributes === 'function') {
+          this.updateAttributes(playerAttributes);
         }
       }
       return true;
@@ -458,8 +456,8 @@
       }
       this._emitInventorySync();
       // --- Attribute and HUD update logic (for drag-and-drop) ---
-      const GameState2 = window.GameState || {};
-      const playerAttributes2 = GameState2.playerAttributes || window.playerAttributes;
+      import GameState from './game.js';
+      const playerAttributes2 = GameState.playerAttributes;
       if (playerAttributes2) {
         const base = { attk: 5, deff: 5, maxHp: 75, maxMp: 75, attkSpeed: 0, thorn: 0, poisonDmg: 0, fireDmg: 0, coldDmg: 0, bleeding: 0, burning: 0, freezing: 0 };
         Object.assign(playerAttributes2, base);

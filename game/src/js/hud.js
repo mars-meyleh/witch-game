@@ -93,7 +93,8 @@
     // inventory methods
     setInventory(inv) {
       // Prefer GameState.inventory if available
-      const gs = window.GameState;
+      import GameState from './game.js';
+      const gs = GameState;
       if (gs && gs.inventory) {
         this.inventory = Object.assign(this.inventory || {}, gs.inventory);
       } else {
