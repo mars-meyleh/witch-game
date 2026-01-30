@@ -97,15 +97,15 @@
       
       // Create attribute rows: each row has a label and a value
       const attributeNames = [
-        { key: 'attk', label: 'Attk' },
-        { key: 'deff', label: 'Deff' },
-        { key: 'maxHp', label: 'Max HP' },
-        { key: 'maxMp', label: 'Max MP' },
-        { key: 'attkSpeed', label: 'Attk Speed' },
+        { key: 'attack', label: 'Attack' },
+        { key: 'defense', label: 'Defense' },
+        { key: 'maxHealth', label: 'Max Health' },
+        { key: 'maxMana', label: 'Max Mana' },
+        { key: 'attackSpeed', label: 'Attack Speed' },
         { key: 'thorn', label: 'Thorn' },
-        { key: 'poisonDmg', label: 'Poison Dmg' },
-        { key: 'fireDmg', label: 'Fire Dmg' },
-        { key: 'coldDmg', label: 'Cold Dmg' },
+        { key: 'poisonDamage', label: 'Poison Damage' },
+        { key: 'fireDamage', label: 'Fire Damage' },
+        { key: 'coldDamage', label: 'Cold Damage' },
         { key: 'bleeding', label: 'Bleeding' },
         { key: 'burning', label: 'Burning' },
         { key: 'freezing', label: 'Freezing' }
@@ -214,15 +214,15 @@
     // update displayed attributes from playerAttributes
     updateAttributes(attrs) {
       if (!attrs) return;
-      if (this.attributeElements['attk']) this.attributeElements['attk'].textContent = String(attrs.attk || 0);
-      if (this.attributeElements['deff']) this.attributeElements['deff'].textContent = String(attrs.deff || 0);
-      if (this.attributeElements['maxHp']) this.attributeElements['maxHp'].textContent = String(attrs.maxHp || 0);
-      if (this.attributeElements['maxMp']) this.attributeElements['maxMp'].textContent = String(attrs.maxMp || 0);
-      if (this.attributeElements['attkSpeed']) this.attributeElements['attkSpeed'].textContent = String(attrs.attkSpeed || 0);
+      if (this.attributeElements['attack']) this.attributeElements['attack'].textContent = String(attrs.attack || 0);
+      if (this.attributeElements['defense']) this.attributeElements['defense'].textContent = String(attrs.defense || 0);
+      if (this.attributeElements['maxHealth']) this.attributeElements['maxHealth'].textContent = String(attrs.maxHealth || 0);
+      if (this.attributeElements['maxMana']) this.attributeElements['maxMana'].textContent = String(attrs.maxMana || 0);
+      if (this.attributeElements['attackSpeed']) this.attributeElements['attackSpeed'].textContent = String(attrs.attackSpeed || 0);
       if (this.attributeElements['thorn']) this.attributeElements['thorn'].textContent = String(attrs.thorn || 0);
-      if (this.attributeElements['poisonDmg']) this.attributeElements['poisonDmg'].textContent = String(attrs.poisonDmg || 0);
-      if (this.attributeElements['fireDmg']) this.attributeElements['fireDmg'].textContent = String(attrs.fireDmg || 0);
-      if (this.attributeElements['coldDmg']) this.attributeElements['coldDmg'].textContent = String(attrs.coldDmg || 0);
+      if (this.attributeElements['poisonDamage']) this.attributeElements['poisonDamage'].textContent = String(attrs.poisonDamage || 0);
+      if (this.attributeElements['fireDamage']) this.attributeElements['fireDamage'].textContent = String(attrs.fireDamage || 0);
+      if (this.attributeElements['coldDamage']) this.attributeElements['coldDamage'].textContent = String(attrs.coldDamage || 0);
       if (this.attributeElements['bleeding']) this.attributeElements['bleeding'].textContent = String(attrs.bleeding || 0);
       if (this.attributeElements['burning']) this.attributeElements['burning'].textContent = String(attrs.burning || 0);
       if (this.attributeElements['freezing']) this.attributeElements['freezing'].textContent = String(attrs.freezing || 0);

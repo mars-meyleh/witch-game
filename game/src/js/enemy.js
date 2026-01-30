@@ -1,11 +1,11 @@
 // Enemy class - simple static enemy for now
 class Enemy {
   // patrolPoints: optional array of {x,y} positions
-  constructor(x, y, sprite = null, hp = 50, damage = 50, patrolPoints = null) {
+  constructor(x, y, sprite = null, health = 50, damage = 50, patrolPoints = null) {
     this.x = x;
     this.y = y;
     this.sprite = sprite || null;
-    this.hp = hp;
+    this.health = health;
     this.damage = damage;
     this._lastHit = 0; // ms timestamp for touch cooldown
     this.hitCooldown = 500; // prevent repeated instant damage
@@ -49,8 +49,8 @@ class Enemy {
 
   takeDamage(amount = 1) {
     if (!this.alive) return;
-    this.hp -= amount;
-    if (this.hp <= 0) {
+    this.health -= amount;
+    if (this.health <= 0) {
       this.alive = false;
     }
   }

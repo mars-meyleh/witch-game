@@ -264,7 +264,7 @@ async function initGame() {
 
   // player attributes
   GameState.playerAttributes = {
-    attk: 5, deff: 5, maxHp: 150, maxMp: 150, attkSpeed: 0, thorn: 0, poisonDmg: 0, fireDmg: 0, coldDmg: 0, bleeding: 0, burning: 0, freezing: 0
+    attack: 5, defense: 5, maxHealth: 150, maxMana: 150, attackSpeed: 0, thorn: 0, poisonDamage: 0, fireDamage: 0, coldDamage: 0, bleeding: 0, burning: 0, freezing: 0
   };
   window.playerAttributes = GameState.playerAttributes;
 
