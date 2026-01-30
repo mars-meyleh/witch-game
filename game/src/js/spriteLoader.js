@@ -9,7 +9,12 @@ const SpriteLoader = {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const blob = await response.blob();
         const img = new Image();
-        img.src = URL.createObjectURL(blob);
+        // Wait for the image to actually load before marking as done
+        await new Promise((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error('Image load failed'));
+          img.src = URL.createObjectURL(blob);
+        });
         results[varName] = img;
         window[varName] = img;
         console.info(`Loaded sprite: ${varName} (${path})`);

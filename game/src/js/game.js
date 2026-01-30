@@ -110,320 +110,343 @@ const map = generateMap(WIDTH, HEIGHT, 0.18);
 // expose map for external managers
 window.gameMap = map;
 
-// Load all sprites at startup
-SpriteLoader.load({
-  WitchSprite: 'src/assets/sprites/witch/witch.png',
-  GolemSprite: 'src/assets/sprites/enemies/golem1.png',
-  wallSprite: 'src/assets/sprites/wall.png',
-  floorSprite: 'src/assets/sprites/floor.png',
-  wattkSprite: 'src/assets/sprites/wattk.png'
-}).catch(err => console.warn('Sprite loading error:', err));
-
-// helper: find a free (non-wall) tile in the map. If preferred provided, try that first.
-function findFreeTile(map, preferred) {
-  if (!map || !map.length) return { x: 1, y: 1 };
-  const H = map.length, W = map[0].length;
-  if (preferred && preferred.x >= 0 && preferred.x < W && preferred.y >= 0 && preferred.y < H) {
-    if (map[preferred.y][preferred.x] === 0) return { x: preferred.x, y: preferred.y };
-  }
-  // try random probes
-  for (let i = 0; i < 300; i++) {
-    const x = 1 + Math.floor(Math.random() * (W - 2));
-    const y = 1 + Math.floor(Math.random() * (H - 2));
-    if (map[y][x] === 0) return { x, y };
-  }
-  // fallback: scan for first non-wall
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (map[y][x] === 0) return { x, y };
-  return { x: 1, y: 1 };
-}
-
-// spawn player on a free tile
-const playerSpawn = findFreeTile(map, { x: 2, y: 2 });
-const player = new Player(playerSpawn.x, playerSpawn.y, window.WitchSprite || null);
-// attach input handlers (mouse + movement/keys) on player
-if (typeof player.initInput === 'function') player.initInput(canvas);
-
-// static golem enemy (placed in the room) with simple patrol between two points; ensure free spawn
-const golemSpawn = findFreeTile(map, { x: 6, y: 6 });
-
-// spawn golem via manager (will use loaded sprite)
-let golem = enemyManager.spawn('golem.basic', golemSpawn.x, golemSpawn.y, { hp: 50, damage: 50, patrolPoints: [{ x: golemSpawn.x, y: golemSpawn.y }, { x: Math.min(WIDTH - 2, golemSpawn.x + 4), y: golemSpawn.y }] });
-// override sprite with loaded image
-if (golem && window.GolemSprite) golem.sprite = window.GolemSprite;
-
-
-// items dropped in the level (e.g., potions)
-const items = []; // { x, y, type, sprite }
-// chest objects
-const chests = []; // { x,y, opened }
-// active projectiles
-const projectiles = [];
-
-// player firing moved into `Player` (see player.initInput and player.update)
-
-// spawn a few chests on the map (avoid player/golem positions)
-function placeChests(count = 2) {
-  for (let i = 0; i < count; i++) {
-    let tries = 0;
-    while (tries++ < 400) {
-      const pos = findFreeTile(map);
-      // avoid player/enemy and other chests
-      if (pos.x === player.x && pos.y === player.y) continue;
-      if (enemyManager && enemyManager.findAt(pos.x, pos.y)) continue;
-      if (chests.some(c => c.x === pos.x && c.y === pos.y)) continue;
-      chests.push({ x: pos.x, y: pos.y, opened: false });
-      break;
-    }
-  }
-}
-placeChests(2);
-
-// start loop immediately; sprite data is embedded (WitchSprite, GrassTile, StoneTile)
-let sprites = { witch: (typeof WitchSprite !== 'undefined') ? WitchSprite : (window.WitchSprite || null) };
-
-// preload chest images (3-frame opening animation)
-// simple inline fetch-based image loader (replaces SpriteLoader)
-(async function loadChestImages() {
-  const paths = [
-    'src/assets/sprites/chest/chest-closed.png',
-    'src/assets/sprites/chest/chest-open1.png',
-    'src/assets/sprites/chest/chest-open2.png'
-  ];
+// Load all sprites at startup (ASYNC - waits for all images to load)
+async function initGame() {
   try {
-    const images = await Promise.all(paths.map(path =>
-      fetch(path).then(r => r.blob()).then(blob => {
-        const img = new Image();
-        img.src = URL.createObjectURL(blob);
-        return img;
-      }).catch(() => null)
-    ));
-    window._chestImages = images;
-    window._chestImagesLoaded = images.every(img => img !== null && img !== undefined);
-    if (window._chestImagesLoaded) {
-      console.info('Chest images loaded:', window._chestImages.length, 'frames');
-    } else {
-      console.warn('Some chest images failed to load');
+    await SpriteLoader.load({
+      WitchSprite: 'src/assets/sprites/witch/witch.png',
+      GolemSprite: 'src/assets/sprites/enemies/golem1.png',
+      heartSprite: 'src/assets/sprites/selection/heart.png',
+      starSprite: 'src/assets/sprites/selection/star.png',
+      healthPotionSprite: 'src/assets/sprites/selection/potion-health.png',
+      manaPotionSprite: 'src/assets/sprites/selection/potion-mana.png',
+      wallSprite: 'src/assets/sprites/selection/wall.png',
+      floorSprite: 'src/assets/sprites/selection/floor.png'
+    });
+    console.info('All sprites loaded successfully');
+  } catch (err) {
+    console.warn('Sprite loading error:', err);
+  }
+  
+  // Continue game initialization AFTER sprites are loaded
+
+  // helper: find a free (non-wall) tile in the map. If preferred provided, try that first.
+  function findFreeTile(map, preferred) {
+    if (!map || !map.length) return { x: 1, y: 1 };
+    const H = map.length, W = map[0].length;
+    if (preferred && preferred.x >= 0 && preferred.x < W && preferred.y >= 0 && preferred.y < H) {
+      if (map[preferred.y][preferred.x] === 0) return { x: preferred.x, y: preferred.y };
     }
-  } catch (e) {
-    console.warn('Failed to load chest images:', e);
+    // try random probes
+    for (let i = 0; i < 300; i++) {
+      const x = 1 + Math.floor(Math.random() * (W - 2));
+      const y = 1 + Math.floor(Math.random() * (H - 2));
+      if (map[y][x] === 0) return { x, y };
+    }
+    // fallback: scan for first non-wall
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (map[y][x] === 0) return { x, y };
+    return { x: 1, y: 1 };
   }
-})();
+
+  // spawn player on a free tile
+  const playerSpawn = findFreeTile(map, { x: 2, y: 2 });
+  const player = new Player(playerSpawn.x, playerSpawn.y, window.WitchSprite || null);
+  window.player = player; // expose to global
+  // attach input handlers (mouse + movement/keys) on player
+  if (typeof player.initInput === 'function') player.initInput(canvas);
+
+  // static golem enemy (placed in the room) with simple patrol between two points; ensure free spawn
+  const golemSpawn = findFreeTile(map, { x: 6, y: 6 });
+
+  // spawn golem via manager (will use loaded sprite)
+  let golem = enemyManager.spawn('golem.basic', golemSpawn.x, golemSpawn.y, { hp: 50, damage: 50, patrolPoints: [{ x: golemSpawn.x, y: golemSpawn.y }, { x: Math.min(WIDTH - 2, golemSpawn.x + 4), y: golemSpawn.y }] });
+  // override sprite with loaded image
+  if (golem && window.GolemSprite) golem.sprite = window.GolemSprite;
 
 
-let lastMove = 0;
-// player stats (HP uses hpPerIcon = 50 by default in HUD)
-window.playerHP = 150; window.playerMaxHP = 150;
-window.playerMana = 25; window.playerMaxMana = 75;
+  // items dropped in the level (e.g., potions)
+  const items = []; // { x, y, type, sprite }
+  // chest objects
+  const chests = []; // { x,y, opened }
+  // active projectiles
+  const projectiles = [];
+  window.projectiles = projectiles; // expose for EnemyManager
 
-// player attributes (base values, can be modified by equipment/weapons)
-let playerAttributes = {
-  attk: 5,           // attack
-  deff: 5,           // defense
-  maxHp: 150,        // max health (50 points per icon)
-  maxMp: 150,        // max mana (50 points per icon)
-  attkSpeed: 0,      // attack speed
-  thorn: 0,          // thorn damage
-  poisonDmg: 0,      // poison damage
-  fireDmg: 0,        // fire damage
-  coldDmg: 0,        // cold damage
-  bleeding: 0,       // bleeding damage
-  burning: 0,        // burning damage
-  freezing: 0        // freezing damage
-};
+  // player firing moved into `Player` (see player.initInput and player.update)
 
-// instantiate HUD (outside of canvas)
-const hud = (window.HUD) ? new window.HUD({ hpPerIcon: 50, manaPerIcon: 25 }) : null;
-if (hud) { hud.setHP(window.playerHP, window.playerMaxHP); hud.setMana(window.playerMana, window.playerMaxMana); }
-// inventory state (health potions, mana potions, keys)
-let inventory = { healthPotion: 2, manaPotion: 2, keys: 0 };
-if (hud) hud.setInventory(inventory);
-
-// expose player attributes to inventory panel
-window.playerAttributes = playerAttributes;
-// expose hud reference so inventory panel can sync counts
-if (hud) window.hud = hud;
-
-// handler called by the InventoryPanel when its contents change
-window._onInventoryPanelChanged = function (counts) {
-  if (!counts) return;
-  inventory.healthPotion = counts.healthPotion || 0;
-  inventory.manaPotion = counts.manaPotion || 0;
-  inventory.keys = counts.keys || 0;
-  if (window.hud && typeof window.hud.setInventory === 'function') window.hud.setInventory(inventory);
-};
-// if panel already exists, ask it to emit its current counts so HUD syncs
-if (window.inventoryPanel && typeof window.inventoryPanel._emitInventorySync === 'function') window.inventoryPanel._emitInventorySync();
-function update() {
-  const now = Date.now();
-  // test keys: O = enemy attack (50), P = boss attack (100)
-  if (!window._testKeyCooldown) window._testKeyCooldown = 0;
-  if (now - window._testKeyCooldown > 180) {
-    if (Input.isDown('o')) { playerHP = Math.max(0, playerHP - 50); window._testKeyCooldown = now; }
-    else if (Input.isDown('p')) { playerHP = Math.max(0, playerHP - 100); window._testKeyCooldown = now; }
-  }
-  // inventory use keys: Q = use health potion, E = use mana potion
-  // delegate player-specific input (movement, attack, potions) to Player
-  if (window.player && typeof window.player.update === 'function') window.player.update(now, map);
-
-  // pickup items if player stands on them
-  for (let i = items.length - 1; i >= 0; i--) {
-    const it = items[i];
-    if (it.x === player.x && it.y === player.y) {
-      // try to add to inventory panel first
-      let added = false;
-      if (window.inventoryPanel && it.spriteName) {
-        try { added = window.inventoryPanel.addItemByName(it.spriteName); } catch (e) { added = false; }
+  // spawn a few chests on the map (avoid player/golem positions)
+  function placeChests(count = 2) {
+    for (let i = 0; i < count; i++) {
+      let tries = 0;
+      while (tries++ < 400) {
+        const pos = findFreeTile(map);
+        // avoid player/enemy and other chests
+        if (pos.x === player.x && pos.y === player.y) continue;
+        if (enemyManager && enemyManager.findAt(pos.x, pos.y)) continue;
+        if (chests.some(c => c.x === pos.x && c.y === pos.y)) continue;
+        chests.push({ x: pos.x, y: pos.y, opened: false });
+        break;
       }
-      if (!added) {
-        if (it.type === 'health') {
-          inventory.healthPotion = (inventory.healthPotion || 0) + 1;
-          if (hud) hud.setInventory(inventory);
-        } else if (it.type === 'mana') {
-          inventory.manaPotion = (inventory.manaPotion || 0) + 1;
-          if (hud) hud.setInventory(inventory);
+    }
+  }
+  placeChests(2);
+
+  // load chest images (3-frame opening animation)
+  await (async function loadChestImages() {
+    const paths = [
+      'src/assets/sprites/chest/chest-closed.png',
+      'src/assets/sprites/chest/chest-open1.png',
+      'src/assets/sprites/chest/chest-open2.png'
+    ];
+    try {
+      const images = await Promise.all(paths.map(path =>
+        fetch(path).then(r => r.blob()).then(blob => {
+          const img = new Image();
+          return new Promise((resolve, reject) => {
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error('Failed to load chest image'));
+            img.src = URL.createObjectURL(blob);
+          });
+        }).catch(() => null)
+      ));
+      window._chestImages = images;
+      window._chestImagesLoaded = images.every(img => img !== null && img !== undefined);
+      if (window._chestImagesLoaded) {
+        console.info('Chest images loaded:', window._chestImages.length, 'frames');
+      } else {
+        console.warn('Some chest images failed to load');
+      }
+    } catch (e) {
+      console.warn('Failed to load chest images:', e);
+    }
+  })();
+
+
+  let lastMove = 0;
+  // player stats (HP uses hpPerIcon = 50 by default in HUD)
+  window.playerHP = 150; window.playerMaxHP = 150;
+  window.playerMana = 25; window.playerMaxMana = 75;
+
+  // player attributes (base values, can be modified by equipment/weapons)
+  let playerAttributes = {
+    attk: 5,           // attack
+    deff: 5,           // defense
+    maxHp: 150,        // max health (50 points per icon)
+    maxMp: 150,        // max mana (50 points per icon)
+    attkSpeed: 0,      // attack speed
+    thorn: 0,          // thorn damage
+    poisonDmg: 0,      // poison damage
+    fireDmg: 0,        // fire damage
+    coldDmg: 0,        // cold damage
+    bleeding: 0,       // bleeding damage
+    burning: 0,        // burning damage
+    freezing: 0        // freezing damage
+  };
+
+  // instantiate HUD (outside of canvas)
+  const hud = (window.HUD) ? new window.HUD({ hpPerIcon: 50, manaPerIcon: 25 }) : null;
+  if (hud) {
+    hud.setHP(window.playerHP, window.playerMaxHP);
+    hud.setMana(window.playerMana, window.playerMaxMana);
+    // assign loaded sprites
+    if (window.heartSprite) hud.heartSprite = window.heartSprite;
+    if (window.starSprite) hud.starSprite = window.starSprite;
+    if (window.healthPotionSprite) hud.healthPotionSprite = window.healthPotionSprite;
+    if (window.manaPotionSprite) hud.manaPotionSprite = window.manaPotionSprite;
+  }
+  // inventory state (health potions, mana potions, keys)
+  let inventory = { healthPotion: 2, manaPotion: 2, keys: 0 };
+  if (hud) hud.setInventory(inventory);
+
+  // expose player attributes to inventory panel
+  window.playerAttributes = playerAttributes;
+  // expose hud reference so inventory panel can sync counts
+  if (hud) window.hud = hud;
+
+  // handler called by the InventoryPanel when its contents change
+  window._onInventoryPanelChanged = function (counts) {
+    if (!counts) return;
+    inventory.healthPotion = counts.healthPotion || 0;
+    inventory.manaPotion = counts.manaPotion || 0;
+    inventory.keys = counts.keys || 0;
+    if (window.hud && typeof window.hud.setInventory === 'function') window.hud.setInventory(inventory);
+  };
+  // if panel already exists, ask it to emit its current counts so HUD syncs
+  if (window.inventoryPanel && typeof window.inventoryPanel._emitInventorySync === 'function') window.inventoryPanel._emitInventorySync();
+  
+  // Define update and draw functions INSIDE async function so they have access to initialized variables
+  window._update = function update() {
+    const now = Date.now();
+    // test keys: O = enemy attack (50), P = boss attack (100)
+    if (!window._testKeyCooldown) window._testKeyCooldown = 0;
+    if (now - window._testKeyCooldown > 180) {
+      if (Input.isDown('o')) { window.playerHP = Math.max(0, window.playerHP - 50); window._testKeyCooldown = now; }
+      else if (Input.isDown('p')) { window.playerHP = Math.max(0, window.playerHP - 100); window._testKeyCooldown = now; }
+    }
+    // inventory use keys: Q = use health potion, E = use mana potion
+    // delegate player-specific input (movement, attack, potions) to Player
+    if (player && typeof player.update === 'function') player.update(now, map);
+
+    // pickup items if player stands on them
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      if (it.x === player.x && it.y === player.y) {
+        // try to add to inventory panel first
+        let added = false;
+        if (window.inventoryPanel && it.spriteName) {
+          try { added = window.inventoryPanel.addItemByName(it.spriteName); } catch (e) { added = false; }
         }
-      }
-      // remove item
-      items.splice(i, 1);
-    }
-  }
-
-  // chest interaction: G to open adjacent or same-tile chest
-  if (!window._chestCooldown) window._chestCooldown = 0;
-  if (now - window._chestCooldown > 300) {
-    if (Input.isDown('g')) {
-      for (let c of chests) {
-        if (c.opened) continue;
-        const man = Math.abs(player.x - c.x) + Math.abs(player.y - c.y);
-        if (man <= 1) {
-          c.opened = true;
-          // record animation start time
-          c.openStart = now;
-          // random potion: 50% health, 50% mana
-          // try to insert into inventory panel first
-          if (window.inventoryPanel) {
-            if (Math.random() < 0.5) {
-              if (!window.inventoryPanel.addItemByName('HealthPotionSprite')) { inventory.healthPotion = (inventory.healthPotion || 0) + 1; }
-            } else {
-              if (!window.inventoryPanel.addItemByName('ManaPotionSprite')) { inventory.manaPotion = (inventory.manaPotion || 0) + 1; }
-            }
+        if (!added) {
+          if (it.type === 'health') {
+            inventory.healthPotion = (inventory.healthPotion || 0) + 1;
             if (hud) hud.setInventory(inventory);
-          } else {
-            if (Math.random() < 0.5) inventory.healthPotion = (inventory.healthPotion || 0) + 1;
-            else inventory.manaPotion = (inventory.manaPotion || 0) + 1;
+          } else if (it.type === 'mana') {
+            inventory.manaPotion = (inventory.manaPotion || 0) + 1;
             if (hud) hud.setInventory(inventory);
           }
-          window._chestCooldown = now;
-          break;
+        }
+        // remove item
+        items.splice(i, 1);
+      }
+    }
+
+    // chest interaction: G to open adjacent or same-tile chest
+    if (!window._chestCooldown) window._chestCooldown = 0;
+    if (now - window._chestCooldown > 300) {
+      if (Input.isDown('g')) {
+        for (let c of chests) {
+          if (c.opened) continue;
+          const man = Math.abs(player.x - c.x) + Math.abs(player.y - c.y);
+          if (man <= 1) {
+            c.opened = true;
+            // record animation start time
+            c.openStart = now;
+            // random potion: 50% health, 50% mana
+            // try to insert into inventory panel first
+            if (window.inventoryPanel) {
+              if (Math.random() < 0.5) {
+                if (!window.inventoryPanel.addItemByName('HealthPotionSprite')) { inventory.healthPotion = (inventory.healthPotion || 0) + 1; }
+              } else {
+                if (!window.inventoryPanel.addItemByName('ManaPotionSprite')) { inventory.manaPotion = (inventory.manaPotion || 0) + 1; }
+              }
+              if (hud) hud.setInventory(inventory);
+            } else {
+              if (Math.random() < 0.5) inventory.healthPotion = (inventory.healthPotion || 0) + 1;
+              else inventory.manaPotion = (inventory.manaPotion || 0) + 1;
+              if (hud) hud.setInventory(inventory);
+            }
+            window._chestCooldown = now;
+            break;
+          }
         }
       }
     }
-  }
 
-  // update projectiles
-  for (let i = projectiles.length - 1; i >= 0; i--) {
-    const p = projectiles[i];
-    if (!p || !p.alive) { projectiles.splice(i, 1); continue; }
-    p.update(now, map);
-    if (!p.alive) { projectiles.splice(i, 1); continue; }
-  }
+    // update projectiles
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const p = projectiles[i];
+      if (!p || !p.alive) { projectiles.splice(i, 1); continue; }
+      p.update(now, map);
+      if (!p.alive) { projectiles.splice(i, 1); continue; }
+    }
+  };
+
+  window._draw = function draw() {
+    for (let y = 0; y < HEIGHT; y++) {
+      for (let x = 0; x < WIDTH; x++) {
+        const tx = x * TILE, ty = y * TILE;
+        if (map[y][x] === 1) {
+          if (window.wallSprite && window.wallSprite instanceof Image) ctx.drawImage(window.wallSprite, tx, ty, TILE, TILE);
+          else { ctx.fillStyle = '#DAB6D8'; ctx.fillRect(tx, ty, TILE, TILE); }
+        } else {
+          if (window.floorSprite && window.floorSprite instanceof Image) ctx.drawImage(window.floorSprite, tx, ty, TILE, TILE);
+          else { ctx.fillStyle = '#F6E7F2'; ctx.fillRect(tx, ty, TILE, TILE); }
+        }
+      }
+    }
+    // draw & update enemies via EnemyManager
+    if (enemyManager) {
+      enemyManager.update(Date.now(), map);
+      enemyManager.draw(ctx, TILE);
+    }
+
+    // draw items on ground
+    for (let it of items) {
+      if (it && !it.sprite && it.spriteName && window[it.spriteName]) it.sprite = window[it.spriteName];
+      if (it && it.sprite && it.sprite instanceof Image) ctx.drawImage(it.sprite, it.x * TILE, it.y * TILE, TILE, TILE);
+      else {
+        // fallback: simple marker
+        ctx.fillStyle = '#FF8080'; ctx.fillRect(it.x * TILE + 4, it.y * TILE + 4, TILE - 8, TILE - 8);
+      }
+    }
+    // draw chests
+    for (let c of chests) {
+      if (!c) continue;
+      const chestImgs = (window._chestImages && window._chestImages.length) ? window._chestImages : null;
+      const chestImgsLoaded = window._chestImagesLoaded === true;
+      if (c.opened) {
+        if (chestImgs && chestImgsLoaded) {
+          // play opening animation: frames 0..N-1 over duration
+          const frameDuration = 120; // ms per frame
+          const elapsed = (c.openStart ? (Date.now() - c.openStart) : Infinity);
+          const total = chestImgs.length * frameDuration;
+          const idx = elapsed >= total ? (chestImgs.length - 1) : Math.floor(elapsed / frameDuration);
+          ctx.imageSmoothingEnabled = false;
+          const img = chestImgs[Math.max(0, Math.min(chestImgs.length - 1, idx))];
+          if (img) ctx.drawImage(img, c.x * TILE, c.y * TILE, TILE, TILE);
+          else ctx.fillStyle = '#C4A36A', ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+        } else if (chestImgs && !chestImgsLoaded) {
+          // images partially available or failed to load — warn once and fall back to rectangle
+          if (!c._chestLoadWarned) { console.warn('Chest images not fully available; falling back to rectangle fallback.'); c._chestLoadWarned = true; }
+          ctx.fillStyle = '#C4A36A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+        } else {
+          ctx.fillStyle = '#C4A36A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+        }
+      } else {
+        if (chestImgs && chestImgsLoaded) {
+          // show closed frame (frame 0)
+          ctx.imageSmoothingEnabled = false;
+          const img = chestImgs[0];
+          if (img) ctx.drawImage(img, c.x * TILE, c.y * TILE, TILE, TILE);
+          else ctx.fillStyle = '#A66A2A', ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+        } else if (chestImgs && !chestImgsLoaded) {
+          if (!c._chestLoadWarned) { console.warn('Chest images not fully available; falling back to rectangle fallback.'); c._chestLoadWarned = true; }
+          ctx.fillStyle = '#A66A2A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+        } else {
+          ctx.fillStyle = '#A66A2A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
+        }
+      }
+    }
+    // draw projectiles
+    for (let p of projectiles) {
+      if (p && p.alive) p.draw(ctx, TILE);
+    }
+    // draw player; tile size is TILE
+    player.draw(ctx, player.x * TILE, player.y * TILE, TILE);
+    // update DOM HUD
+    if (hud) { hud.setHP(window.playerHP, window.playerMaxHP); hud.setMana(window.playerMana, window.playerMaxMana); }
+
+
+
+    // debug overlay showing golem status
+    try {
+      const gs = golem ? (golem.alive ? 'alive' : 'dead') : 'missing';
+      const gx = golem ? golem.x : '-';
+      const gy = golem ? golem.y : '-';
+      const gi = (window._spriteImagesLoaded && window._spriteImagesLoaded['golem.basic']) ? 'imgs' : 'noimgs';
+      ctx.save();
+      ctx.font = '10px monospace';
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(6,6,180,40);
+      ctx.fillStyle = '#fff'; ctx.fillText(`Golem: ${gs} (${gx},${gy}) ${gi}`, 10, 20);
+      if (golem && golem.sprite) ctx.fillText(`Sprite id: ${golem.sprite.id}`, 10, 34);
+      ctx.restore();
+    } catch (e) { /* ignore */ }
+  };
+
+  // Start game loop now that all initialization is complete
+  function loop() { window._update(); window._draw(); requestAnimationFrame(loop); }
+  loop();
 }
 
-function draw() {
-  for (let y = 0; y < HEIGHT; y++) {
-    for (let x = 0; x < WIDTH; x++) {
-      const tx = x * TILE, ty = y * TILE;
-      if (map[y][x] === 1) {
-        if (window.wallSprite && window.wallSprite instanceof Image) ctx.drawImage(window.wallSprite, tx, ty, TILE, TILE);
-        else { ctx.fillStyle = '#DAB6D8'; ctx.fillRect(tx, ty, TILE, TILE); }
-      } else {
-        if (window.floorSprite && window.floorSprite instanceof Image) ctx.drawImage(window.floorSprite, tx, ty, TILE, TILE);
-        else { ctx.fillStyle = '#F6E7F2'; ctx.fillRect(tx, ty, TILE, TILE); }
-      }
-    }
-  }
-  // draw & update enemies via EnemyManager
-  if (enemyManager) {
-    enemyManager.update(Date.now(), map);
-    enemyManager.draw(ctx, TILE);
-  }
-
-  // draw items on ground
-  for (let it of items) {
-    if (it && !it.sprite && it.spriteName && window[it.spriteName]) it.sprite = window[it.spriteName];
-    if (it && it.sprite && it.sprite instanceof Image) ctx.drawImage(it.sprite, it.x * TILE, it.y * TILE, TILE, TILE);
-    else {
-      // fallback: simple marker
-      ctx.fillStyle = '#FF8080'; ctx.fillRect(it.x * TILE + 4, it.y * TILE + 4, TILE - 8, TILE - 8);
-    }
-  }
-  // draw chests
-  for (let c of chests) {
-    if (!c) continue;
-    const chestImgs = (window._chestImages && window._chestImages.length) ? window._chestImages : null;
-    const chestImgsLoaded = window._chestImagesLoaded === true;
-    if (c.opened) {
-      if (chestImgs && chestImgsLoaded) {
-        // play opening animation: frames 0..N-1 over duration
-        const frameDuration = 120; // ms per frame
-        const elapsed = (c.openStart ? (Date.now() - c.openStart) : Infinity);
-        const total = chestImgs.length * frameDuration;
-        const idx = elapsed >= total ? (chestImgs.length - 1) : Math.floor(elapsed / frameDuration);
-        ctx.imageSmoothingEnabled = false;
-        const img = chestImgs[Math.max(0, Math.min(chestImgs.length - 1, idx))];
-        if (img) ctx.drawImage(img, c.x * TILE, c.y * TILE, TILE, TILE);
-        else ctx.fillStyle = '#C4A36A', ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
-      } else if (chestImgs && !chestImgsLoaded) {
-        // images partially available or failed to load — warn once and fall back to rectangle
-        if (!c._chestLoadWarned) { console.warn('Chest images not fully available; falling back to rectangle fallback.'); c._chestLoadWarned = true; }
-        ctx.fillStyle = '#C4A36A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
-      } else {
-        ctx.fillStyle = '#C4A36A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
-      }
-    } else {
-      if (chestImgs && chestImgsLoaded) {
-        // show closed frame (frame 0)
-        ctx.imageSmoothingEnabled = false;
-        const img = chestImgs[0];
-        if (img) ctx.drawImage(img, c.x * TILE, c.y * TILE, TILE, TILE);
-        else ctx.fillStyle = '#A66A2A', ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
-      } else if (chestImgs && !chestImgsLoaded) {
-        if (!c._chestLoadWarned) { console.warn('Chest images not fully available; falling back to rectangle fallback.'); c._chestLoadWarned = true; }
-        ctx.fillStyle = '#A66A2A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
-      } else {
-        ctx.fillStyle = '#A66A2A'; ctx.fillRect(c.x * TILE + 1, c.y * TILE + 4, TILE - 2, TILE - 8);
-      }
-    }
-  }
-  // draw projectiles
-  for (let p of projectiles) {
-    if (p && p.alive) p.draw(ctx, TILE);
-  }
-  // draw player; tile size is TILE
-  player.draw(ctx, player.x * TILE, player.y * TILE, TILE);
-  // update DOM HUD
-  if (hud) { hud.setHP(window.playerHP, window.playerMaxHP); hud.setMana(window.playerMana, window.playerMaxMana); }
-
-
-
-  // debug overlay showing golem status
-  try {
-    const gs = golem ? (golem.alive ? 'alive' : 'dead') : 'missing';
-    const gx = golem ? golem.x : '-';
-    const gy = golem ? golem.y : '-';
-    const gi = (window._spriteImagesLoaded && window._spriteImagesLoaded['golem.basic']) ? 'imgs' : 'noimgs';
-    ctx.save();
-    ctx.font = '10px monospace';
-    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(6,6,180,40);
-    ctx.fillStyle = '#fff'; ctx.fillText(`Golem: ${gs} (${gx},${gy}) ${gi}`, 10, 20);
-    if (golem && golem.sprite) ctx.fillText(`Sprite id: ${golem.sprite.id}`, 10, 34);
-    ctx.restore();
-  } catch (e) { /* ignore */ }
-
-
-}
-
-function loop() { update(); draw(); requestAnimationFrame(loop); }
-
-// start the game loop after initialization
-loop();
+// Initialize the game (load sprites, spawn entities, start loop)
+initGame().catch(err => console.error('Game initialization failed:', err, err && err.stack ? err.stack : ''));

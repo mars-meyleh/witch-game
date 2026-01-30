@@ -28,8 +28,13 @@
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     ctx.globalAlpha = filled ? 1 : 0.28;
-    const api = new SpriteAPI(ctx, ICON_SCALE);
-    api.draw(sprite, 0, 0, false);
+    if (sprite && sprite instanceof Image) {
+      ctx.drawImage(sprite, 0, 0, ICON_SIZE, ICON_SIZE);
+    } else {
+      // fallback: colored rectangle
+      ctx.fillStyle = filled ? '#FF69B4' : '#AAA';
+      ctx.fillRect(2, 2, ICON_SIZE - 4, ICON_SIZE - 4);
+    }
     ctx.restore();
   }
 

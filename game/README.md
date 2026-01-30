@@ -1,84 +1,59 @@
-Pastel Roguelike (Retro 16-bit, browser)
 
-Overview
+# Pastel Roguelike (Retro 16-bit, browser)
+
+## Overview
 - Small roguelike skeleton using HTML/CSS/JS
 - Pixel-perfect (canvas scaled for retro look)
 - Pastel, girly arcade aesthetic
 
-Files
+## Files
 - `index.html` — entry page
 - `src/css/style.css` — pastel theme + pixelated canvas
-- `src/js/*` — game modules (`game.js`, `player.js`, `rooms.js`, `input.js`, `spriteLoader.js`)
-- `src/assets/sprites/` — put your generated sprites here
+- `src/js/*` — game modules (`game.js`, `player.js`, `rooms.js`, `input.js`, `spriteLoader.js`, etc.)
+- `src/assets/sprites/` — place your PNG sprite files here
 
-Sprite integration
-1. Place generated sprite PNGs into `src/assets/sprites/`.
-2. The project supports three integration styles — choose which fits your generator:
+## Sprite Integration (PNG Only)
+1. Place your PNG sprite files into `src/assets/sprites/` and its subfolders (e.g. `witch/`, `enemies/`, `selection/`).
+2. Sprites are loaded at startup using the `SpriteLoader.load()` function in `game.js`:
 
-   - File assets (PNG): place files in `src/assets/sprites/` and call:
+   ```js
+   await SpriteLoader.load({
+     WitchSprite: 'src/assets/sprites/witch/witch.png',
+     GolemSprite: 'src/assets/sprites/enemies/golem1.png',
+     heartSprite: 'src/assets/sprites/selection/heart.png',
+     starSprite: 'src/assets/sprites/selection/star.png',
+     healthPotionSprite: 'src/assets/sprites/selection/potion-health.png',
+     manaPotionSprite: 'src/assets/sprites/selection/potion-mana.png',
+     wallSprite: 'src/assets/sprites/selection/wall.png',
+     floorSprite: 'src/assets/sprites/selection/floor.png'
+   });
+   // Each key becomes a global (e.g. window.WitchSprite)
+   ```
 
-      ```js
-      SpriteLoader.load(['src/assets/sprites/player.png']).then(({images}) => {
-         // images['src/assets/sprites/player.png'] is an Image or null
-      });
-      ```
+3. All sprite drawing uses native Canvas API:
 
-   - Data-driven sprites (recommended): your generator produces sprite objects that match the project's format (palette name + 16x16 index map). Example shape:
+   ```js
+   ctx.drawImage(window.WitchSprite, x, y, TILE, TILE);
+   ```
 
-      ```js
-      const sprite = {
-         id: 'witch.mushroom',
-         size: 16,
-         palette: 'witch',
-         pixels: [ /* 16 arrays of 16 indices */ ]
-      };
-      SpriteLoader.load([sprite]).then(({sprites}) => {
-         // sprites['witch.mushroom'] is registered and can be used by SpriteAPI
-      });
-      ```
+4. If a sprite fails to load, the game will fall back to drawing a colored rectangle.
 
-   - Palette registration: you can register palettes directly (useful if your generator returns palettes):
+## Troubleshooting
+- If sprites do not appear, check the browser console for errors about missing files or failed image loads.
+- Make sure all sprite paths in `SpriteLoader.load()` match the actual file locations.
+- No support for SpriteAPI, palettes, or data-driven sprite objects—only PNG files are supported.
 
-      ```js
-      SpriteLoader.load([{ type: 'palette', id: 'witch', map: { 0: null, 1: '#fff', ... } }])
-         .then(({palettes}) => { /* palettes.witch available */ });
-      ```
+## Running the Game
+- Open `index.html` in a browser. For some browsers, serving from `file://` may restrict image loading; use a simple local server if needed.
 
-   - Convenience: call `SpriteLoader.loadEmbedded()` to pick up palettes and sprites defined in `src/js/sprites.js`.
-
-Example: wiring a sprite-generator function
-
-If your generator exports a function that returns an object or array, adapt like this:
-
-```js
-// hypothetical generator API: generateAll() -> { palettes: {...}, sprites: [...] }
-const generated = mySpriteGenerator.generateAll();
-
-// prepare items for SpriteLoader (mix of palette entries and sprite objects)
-const items = [];
-if(generated.palettes){
-   Object.keys(generated.palettes).forEach(k => items.push({ type: 'palette', id: k, map: generated.palettes[k] }));
-}
-if(generated.sprites && Array.isArray(generated.sprites)){
-   generated.sprites.forEach(s => items.push(s));
-}
-
-SpriteLoader.load(items).then(({palettes, sprites, images}) => {
-   // now SpriteAPI can draw registered sprites
-   const spriteAPI = new SpriteAPI(ctx, 1);
-   spriteAPI.draw(sprites['witch.mushroom'], 100, 100, false);
-});
-```
-
-Run
-- Open `index.html` in a browser. No server required for basic testing (for some browsers serving from file:// may restrict image loading; use a simple local server if needed).
-
-Quick local server (optional):
+### Quick local server (optional):
 
 ```bash
-python -m http.server 8000
+python3 -m http.server 8000
 ```
 
-Next steps I can do for you
-- Wire your sprite-generation method into `spriteLoader.js` if you provide the API.
-- Add level persistence, procedural rooms, enemies, and items.
+Then open [http://localhost:8000/](http://localhost:8000/) in your browser.
+
+## Next steps
+- Add new PNG sprites to `src/assets/sprites/` and update the loader in `game.js` as needed.
+- Expand gameplay: add more enemies, items, and features.

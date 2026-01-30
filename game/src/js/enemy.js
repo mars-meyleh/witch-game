@@ -79,13 +79,6 @@ class EnemyManager {
     this.map = window.gameMap;
     this.tileSize = window.TILE || 16;
     this._inited = true;
-
-    // spawn a sample golem so levels have enemies by default
-    try {
-      const golemSpawn = (window.findFreeTile) ? window.findFreeTile(this.map, { x: 6, y: 6 }) : { x: 6, y: 6 };
-      this.spawn('golem.basic', golemSpawn.x, golemSpawn.y, { hp: 50, damage: 50, patrolPoints: [{ x: golemSpawn.x, y: golemSpawn.y }, { x: Math.min((window.WIDTH || 20) - 2, golemSpawn.x + 4), y: golemSpawn.y }] });
-    } catch (e) { /* ignore */ }
-
     requestAnimationFrame(this._loop);
   }
 
