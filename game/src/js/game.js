@@ -142,7 +142,7 @@ window.gameMap = GameState.map;
 // Load all sprites at startup (ASYNC - waits for all images to load)
 async function initGame() {
   // Set witch projectile sprite to star
-  GameState.wattkSprite = window.starSprite || null;
+  GameState.wattkSprite = GameState.spriteManager.get('starSprite');
   try {
     await SpriteLoader.load({
       WitchSprite: 'src/assets/sprites/witch/witch.png',
@@ -180,7 +180,7 @@ async function initGame() {
 
   // spawn player on a free tile
   const playerSpawn = findFreeTile(GameState.map, { x: 2, y: 2 });
-  const player = new Player(playerSpawn.x, playerSpawn.y, window.WitchSprite || null);
+  const player = new Player(playerSpawn.x, playerSpawn.y, GameState.spriteManager.get('WitchSprite'));
   GameState.player = player;
   window.player = player;
   if (typeof player.initInput === 'function') player.initInput(GameState.canvas);
@@ -202,7 +202,7 @@ async function initGame() {
     golemPositions.push(pos);
     let patrol = [{ x: pos.x, y: pos.y }, { x: Math.min(GameState.WIDTH - 2, pos.x + 4), y: pos.y }];
     let golem = enemyManager.spawn('golem.basic', pos.x, pos.y, { hp: 50, damage: 50, patrolPoints: patrol });
-    if (golem && window.GolemSprite) golem.sprite = window.GolemSprite;
+    if (golem) golem.sprite = GameState.spriteManager.get('GolemSprite');
   }
 
   // items dropped in the level
@@ -274,10 +274,10 @@ async function initGame() {
   if (hud) {
     hud.setHP(GameState.playerHP, GameState.playerMaxHP);
     hud.setMana(GameState.playerMana, GameState.playerMaxMana);
-    if (window.heartSprite) hud.heartSprite = window.heartSprite;
-    if (window.starSprite) hud.starSprite = window.starSprite;
-    if (window.healthPotionSprite) hud.healthPotionSprite = window.healthPotionSprite;
-    if (window.manaPotionSprite) hud.manaPotionSprite = window.manaPotionSprite;
+    hud.heartSprite = GameState.spriteManager.get('heartSprite');
+    hud.starSprite = GameState.spriteManager.get('starSprite');
+    hud.healthPotionSprite = GameState.spriteManager.get('healthPotionSprite');
+    hud.manaPotionSprite = GameState.spriteManager.get('manaPotionSprite');
   }
 
   // inventory state
@@ -352,7 +352,7 @@ async function initGame() {
               { type: 'dress', name: 'Dress', spriteName: 'dressSprite' }
             ];
             const eq = eqTypes[Math.floor(Math.random() * eqTypes.length)];
-            GameState.items.push({ x: c.x, y: c.y, type: eq.type, name: eq.name, spriteName: eq.spriteName, sprite: window[eq.spriteName] || null });
+            GameState.items.push({ x: c.x, y: c.y, type: eq.type, name: eq.name, spriteName: eq.spriteName, sprite: GameState.spriteManager.get(eq.spriteName) });
             GameState._chestCooldown = now;
             break;
           }
@@ -374,10 +374,12 @@ async function initGame() {
       for (let x = 0; x < GameState.WIDTH; x++) {
         const tx = x * GameState.TILE, ty = y * GameState.TILE;
         if (GameState.map[y][x] === 1) {
-          if (window.wallSprite && window.wallSprite instanceof Image) GameState.ctx.drawImage(window.wallSprite, tx, ty, GameState.TILE, GameState.TILE);
+          const wallSprite = GameState.spriteManager.get('wallSprite');
+          if (wallSprite && wallSprite instanceof Image) GameState.ctx.drawImage(wallSprite, tx, ty, GameState.TILE, GameState.TILE);
           else { GameState.ctx.fillStyle = '#DAB6D8'; GameState.ctx.fillRect(tx, ty, GameState.TILE, GameState.TILE); }
         } else {
-          if (window.floorSprite && window.floorSprite instanceof Image) GameState.ctx.drawImage(window.floorSprite, tx, ty, GameState.TILE, GameState.TILE);
+          const floorSprite = GameState.spriteManager.get('floorSprite');
+          if (floorSprite && floorSprite instanceof Image) GameState.ctx.drawImage(floorSprite, tx, ty, GameState.TILE, GameState.TILE);
           else { GameState.ctx.fillStyle = '#F6E7F2'; GameState.ctx.fillRect(tx, ty, GameState.TILE, GameState.TILE); }
         }
       }
