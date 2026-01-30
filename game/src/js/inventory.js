@@ -232,9 +232,8 @@
     render() {
       const renderSlot = (slot) => {
         const ctx = slot.cvs.getContext('2d'); ctx.clearRect(0, 0, slot.cvs.width, slot.cvs.height);
-        if (slot.sprite && window.SpriteAPI) {
-          const api = new window.SpriteAPI(ctx, ICON_SCALE);
-          api.draw(slot.sprite, 0, 0, false);
+        if (slot.sprite && slot.sprite instanceof Image) {
+          ctx.drawImage(slot.sprite, 0, 0, slot.cvs.width, slot.cvs.height);
         } else {
           // empty visual
           ctx.fillStyle = 'rgba(0,0,0,0.03)'; ctx.fillRect(0, 0, slot.cvs.width, slot.cvs.height);
@@ -335,6 +334,31 @@
       this.render();
       this.save();
       this._emitInventorySync();
+      // --- Attribute and HUD update logic ---
+      if (window.playerAttributes) {
+        // Reset to base values
+        const base = { attk: 5, deff: 5, maxHp: 75, maxMp: 75, attkSpeed: 0, thorn: 0, poisonDmg: 0, fireDmg: 0, coldDmg: 0, bleeding: 0, burning: 0, freezing: 0 };
+        Object.assign(window.playerAttributes, base);
+        // Apply bonuses from equipped items
+        for (let s of this.equipSlots) {
+          if (!s.spriteName) continue;
+          if (/hat/i.test(s.spriteName)) window.playerAttributes.maxMp += 25; // +1 star
+          if (/dress/i.test(s.spriteName)) window.playerAttributes.maxHp += 50; // +1 heart
+          if (/corset/i.test(s.spriteName)) {
+            window.playerAttributes.deff += 5;
+            window.playerAttributes.thorn += 5;
+          }
+        }
+        // Update HUD (hearts/stars)
+        if (window.hud) {
+          window.hud.setHP(window.playerHP, window.playerAttributes.maxHp);
+          window.hud.setMana(window.playerMana, window.playerAttributes.maxMp);
+        }
+        // Update attribute panel
+        if (window.inventoryPanel && typeof window.inventoryPanel.updateAttributes === 'function') {
+          window.inventoryPanel.updateAttributes(window.playerAttributes);
+        }
+      }
       return true;
     }
 
@@ -355,8 +379,10 @@
       g.style.position = 'fixed'; g.style.pointerEvents = 'none'; g.style.zIndex = 9999; g.style.width = src.cvs.style.width; g.style.height = src.cvs.style.height;
       document.body.appendChild(g);
       this._drag.ghost = g; this._drag.ghostCtx = g.getContext('2d');
-      const api = new window.SpriteAPI(this._drag.ghostCtx, ICON_SCALE);
-      api.draw(this._drag.sprite, 0, 0, false);
+      if (this._drag && this._drag.ghostCtx && this._drag.sprite && this._drag.sprite instanceof Image) {
+        this._drag.ghostCtx.clearRect(0, 0, this._drag.ghost.width, this._drag.ghost.height);
+        this._drag.ghostCtx.drawImage(this._drag.sprite, 0, 0, this._drag.ghost.width, this._drag.ghost.height);
+      }
       this._onDragMove(x, y);
     }
 
@@ -427,6 +453,27 @@
         if (this.equipSlots[2]) { this.equipSlots[2].disabled = false; }
       }
       this._emitInventorySync();
+      // --- Attribute and HUD update logic (for drag-and-drop) ---
+      if (window.playerAttributes) {
+        const base = { attk: 5, deff: 5, maxHp: 75, maxMp: 75, attkSpeed: 0, thorn: 0, poisonDmg: 0, fireDmg: 0, coldDmg: 0, bleeding: 0, burning: 0, freezing: 0 };
+        Object.assign(window.playerAttributes, base);
+        for (let s of this.equipSlots) {
+          if (!s.spriteName) continue;
+          if (/hat/i.test(s.spriteName)) window.playerAttributes.maxMp += 25;
+          if (/dress/i.test(s.spriteName)) window.playerAttributes.maxHp += 50;
+          if (/corset/i.test(s.spriteName)) {
+            window.playerAttributes.deff += 5;
+            window.playerAttributes.thorn += 5;
+          }
+        }
+        if (window.hud) {
+          window.hud.setHP(window.playerHP, window.playerAttributes.maxHp);
+          window.hud.setMana(window.playerMana, window.playerAttributes.maxMp);
+        }
+        if (window.inventoryPanel && typeof window.inventoryPanel.updateAttributes === 'function') {
+          window.inventoryPanel.updateAttributes(window.playerAttributes);
+        }
+      }
     }
 
     // consume a consumable from inventory panel by spriteName, returns true if consumed

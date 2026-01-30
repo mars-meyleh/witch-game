@@ -137,10 +137,11 @@ class EnemyManager {
 
   _onDeath(en) {
     if (!window.items) window.items = [];
-    const isHealth = Math.random() < 0.5;
-    const type = isHealth ? 'health' : 'mana';
-    const spriteName = isHealth ? 'HealthPotionSprite' : 'ManaPotionSprite';
-    window.items.push({ x: en.x, y: en.y, type, spriteName });
+    // Drop mushroom or lunar fruit (placeholder: heart/star PNG)
+    const isMushroom = Math.random() < 0.5;
+    const type = isMushroom ? 'mushroom' : 'lunarfruit';
+    const spriteName = isMushroom ? 'heartSprite' : 'starSprite';
+    window.items.push({ x: en.x, y: en.y, type, spriteName, sprite: window[spriteName] || null });
   }
 }
 

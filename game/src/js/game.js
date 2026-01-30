@@ -112,6 +112,8 @@ window.gameMap = map;
 
 // Load all sprites at startup (ASYNC - waits for all images to load)
 async function initGame() {
+    // Set witch projectile sprite to star
+    window.wattkSprite = window.starSprite || null;
   try {
     await SpriteLoader.load({
       WitchSprite: 'src/assets/sprites/witch/witch.png',
@@ -121,7 +123,10 @@ async function initGame() {
       healthPotionSprite: 'src/assets/sprites/selection/potion-health.png',
       manaPotionSprite: 'src/assets/sprites/selection/potion-mana.png',
       wallSprite: 'src/assets/sprites/selection/wall.png',
-      floorSprite: 'src/assets/sprites/selection/floor.png'
+      floorSprite: 'src/assets/sprites/selection/floor.png',
+      hatSprite: 'src/assets/sprites/equipment/equipment_hat.png',
+      dressSprite: 'src/assets/sprites/equipment/equipment_dress.png',
+      corsetSprite: 'src/assets/sprites/equipment/equipment_corset.png'
     });
     console.info('All sprites loaded successfully');
   } catch (err) {
@@ -155,19 +160,31 @@ async function initGame() {
   // attach input handlers (mouse + movement/keys) on player
   if (typeof player.initInput === 'function') player.initInput(canvas);
 
-  // static golem enemy (placed in the room) with simple patrol between two points; ensure free spawn
-  const golemSpawn = findFreeTile(map, { x: 6, y: 6 });
+  // chest objects (must be declared before golem spawn logic)
+  const chests = []; // { x,y, opened }
 
-  // spawn golem via manager (will use loaded sprite)
-  let golem = enemyManager.spawn('golem.basic', golemSpawn.x, golemSpawn.y, { hp: 50, damage: 50, patrolPoints: [{ x: golemSpawn.x, y: golemSpawn.y }, { x: Math.min(WIDTH - 2, golemSpawn.x + 4), y: golemSpawn.y }] });
-  // override sprite with loaded image
-  if (golem && window.GolemSprite) golem.sprite = window.GolemSprite;
+  // static golem enemy (placed in the room) with simple patrol between two points; ensure free spawn
+  // spawn 6 golems at random, valid positions
+  const golemPositions = [];
+  for (let i = 0; i < 6; i++) {
+    let tries = 0, pos;
+    while (tries++ < 400) {
+      pos = findFreeTile(map);
+      // avoid player, chests, and other golems
+      if (pos.x === player.x && pos.y === player.y) continue;
+      if (chests.some(c => c.x === pos.x && c.y === pos.y)) continue;
+      if (golemPositions.some(gp => gp.x === pos.x && gp.y === pos.y)) continue;
+      break;
+    }
+    golemPositions.push(pos);
+    let patrol = [{ x: pos.x, y: pos.y }, { x: Math.min(WIDTH - 2, pos.x + 4), y: pos.y }];
+    let golem = enemyManager.spawn('golem.basic', pos.x, pos.y, { hp: 50, damage: 50, patrolPoints: patrol });
+    if (golem && window.GolemSprite) golem.sprite = window.GolemSprite;
+  }
 
 
   // items dropped in the level (e.g., potions)
   const items = []; // { x, y, type, sprite }
-  // chest objects
-  const chests = []; // { x,y, opened }
   // active projectiles
   const projectiles = [];
   window.projectiles = projectiles; // expose for EnemyManager
@@ -255,7 +272,7 @@ async function initGame() {
     if (window.manaPotionSprite) hud.manaPotionSprite = window.manaPotionSprite;
   }
   // inventory state (health potions, mana potions, keys)
-  let inventory = { healthPotion: 2, manaPotion: 2, keys: 0 };
+  let inventory = { healthPotion: 2, manaPotion: 2, keys: 0, equipment: [], equipmentSlots: { hat: null, corset: null, dress: null } };
   if (hud) hud.setInventory(inventory);
 
   // expose player attributes to inventory panel
@@ -290,11 +307,17 @@ async function initGame() {
     // pickup items if player stands on them
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.x === player.x && it.y === player.y) {
+      if (it.x === player.x && it.y === player.y && Input.isDown('f')) {
         // try to add to inventory panel first
         let added = false;
         if (window.inventoryPanel && it.spriteName) {
           try { added = window.inventoryPanel.addItemByName(it.spriteName); } catch (e) { added = false; }
+          // Patch: force slot sprite assignment if missing
+          if (window.inventoryPanel && window.inventoryPanel.invSlots) {
+            for (let s of window.inventoryPanel.invSlots) {
+              if (s.spriteName === it.spriteName && !s.sprite) s.sprite = window[it.spriteName] || null;
+            }
+          }
         }
         if (!added) {
           if (it.type === 'health') {
@@ -303,9 +326,24 @@ async function initGame() {
           } else if (it.type === 'mana') {
             inventory.manaPotion = (inventory.manaPotion || 0) + 1;
             if (hud) hud.setInventory(inventory);
+          } else if (it.type === 'mushroom' || it.type === 'lunarfruit') {
+            if (window.inventoryPanel && it.spriteName) {
+              window.inventoryPanel.addItemByName(it.spriteName);
+              if (window.inventoryPanel && window.inventoryPanel.invSlots) {
+                for (let s of window.inventoryPanel.invSlots) {
+                  if (s.spriteName === it.spriteName && !s.sprite) s.sprite = window[it.spriteName] || null;
+                }
+              }
+            }
+          } else if (it.type === 'hat' || it.type === 'corset' || it.type === 'dress') {
+            if (!inventory.equipment) inventory.equipment = [];
+            inventory.equipment.push({ type: it.type, name: it.name, spriteName: it.spriteName, equipped: false });
+            if (hud) hud.setInventory(inventory);
           }
         }
-        // remove item
+        if (window.inventoryPanel && typeof window.inventoryPanel.render === 'function') {
+          window.inventoryPanel.render();
+        }
         items.splice(i, 1);
       }
     }
@@ -322,19 +360,15 @@ async function initGame() {
             // record animation start time
             c.openStart = now;
             // random potion: 50% health, 50% mana
-            // try to insert into inventory panel first
-            if (window.inventoryPanel) {
-              if (Math.random() < 0.5) {
-                if (!window.inventoryPanel.addItemByName('HealthPotionSprite')) { inventory.healthPotion = (inventory.healthPotion || 0) + 1; }
-              } else {
-                if (!window.inventoryPanel.addItemByName('ManaPotionSprite')) { inventory.manaPotion = (inventory.manaPotion || 0) + 1; }
-              }
-              if (hud) hud.setInventory(inventory);
-            } else {
-              if (Math.random() < 0.5) inventory.healthPotion = (inventory.healthPotion || 0) + 1;
-              else inventory.manaPotion = (inventory.manaPotion || 0) + 1;
-              if (hud) hud.setInventory(inventory);
-            }
+            // drop equipment: hat, corset, dress (random)
+            const eqTypes = [
+              { type: 'hat', name: 'Witch Hat', spriteName: 'hatSprite' },
+              { type: 'corset', name: 'Corset', spriteName: 'corsetSprite' },
+              { type: 'dress', name: 'Dress', spriteName: 'dressSprite' }
+            ];
+            const eq = eqTypes[Math.floor(Math.random() * eqTypes.length)];
+            // Spawn equipment as ground item at chest position
+            items.push({ x: c.x, y: c.y, type: eq.type, name: eq.name, spriteName: eq.spriteName, sprite: window[eq.spriteName] || null });
             window._chestCooldown = now;
             break;
           }
@@ -369,17 +403,7 @@ async function initGame() {
       enemyManager.update(Date.now(), map);
       enemyManager.draw(ctx, TILE);
     }
-
-    // draw items on ground
-    for (let it of items) {
-      if (it && !it.sprite && it.spriteName && window[it.spriteName]) it.sprite = window[it.spriteName];
-      if (it && it.sprite && it.sprite instanceof Image) ctx.drawImage(it.sprite, it.x * TILE, it.y * TILE, TILE, TILE);
-      else {
-        // fallback: simple marker
-        ctx.fillStyle = '#FF8080'; ctx.fillRect(it.x * TILE + 4, it.y * TILE + 4, TILE - 8, TILE - 8);
-      }
-    }
-    // draw chests
+    // draw chests first
     for (let c of chests) {
       if (!c) continue;
       const chestImgs = (window._chestImages && window._chestImages.length) ? window._chestImages : null;
@@ -417,20 +441,21 @@ async function initGame() {
         }
       }
     }
-    // draw projectiles
-    for (let p of projectiles) {
-      if (p && p.alive) p.draw(ctx, TILE);
+    // draw items on top of chests
+    for (let it of items) {
+      if (it && !it.sprite && it.spriteName && window[it.spriteName]) it.sprite = window[it.spriteName];
+      if (it && it.sprite && it.sprite instanceof Image) ctx.drawImage(it.sprite, it.x * TILE, it.y * TILE, TILE, TILE);
+      else {
+        // fallback: simple marker
+        ctx.fillStyle = '#FF8080'; ctx.fillRect(it.x * TILE + 4, it.y * TILE + 4, TILE - 8, TILE - 8);
+      }
     }
-    // draw player; tile size is TILE
-    player.draw(ctx, player.x * TILE, player.y * TILE, TILE);
-    // update DOM HUD
-    if (hud) { hud.setHP(window.playerHP, window.playerMaxHP); hud.setMana(window.playerMana, window.playerMaxMana); }
 
-
-
-    // debug overlay showing golem status
+    // draw player
+    if (player && typeof player.draw === 'function') {
+      player.draw(ctx, player.x * TILE, player.y * TILE, TILE);
+    }
     try {
-      const gs = golem ? (golem.alive ? 'alive' : 'dead') : 'missing';
       const gx = golem ? golem.x : '-';
       const gy = golem ? golem.y : '-';
       const gi = (window._spriteImagesLoaded && window._spriteImagesLoaded['golem.basic']) ? 'imgs' : 'noimgs';
