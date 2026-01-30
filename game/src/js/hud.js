@@ -1,6 +1,6 @@
 // HUD: draws heart and star icons outside the canvas using SpriteAPI
 (function () {
-  const ICON_SCALE = 1; // each icon will be 32x32
+  const ICON_SCALE = 1; // scaling factor for HUD icons
   const ICON_SIZE = 16 * ICON_SCALE;
 
   function makeIconCanvas() {
@@ -41,14 +41,15 @@
       this.healthRow = document.getElementById('hud-health');
       this.manaRow = document.getElementById('hud-mana');
       this.invRow = document.getElementById('hud-inventory');
-      this.heartSprite = window.HeartSprite || null;
-      this.starSprite = window.StarSprite || null;
-      this.manaPotionSprite = window.ManaPotionSprite || window.ManaPotionSprite;
-      this.healthPotionSprite = window.HealthPotionSprite || window.HealthPotionSprite;
-      this.keySprite = window.KeySprite || null;
+      // sprite placeholders — concrete sprite objects (Images or sprite descriptors)
+      // are not guaranteed to be available; leave null so HUD falls back to simple rectangles.
+      this.heartSprite = null;
+      this.starSprite = null;
+      this.manaPotionSprite = null;
+      this.healthPotionSprite = null;
 
       // inventory state
-      this.inventory = { healthPotion: 2, manaPotion: 2, keys: 0 };
+      this.inventory = { healthPotion: 0, manaPotion: 0};
       if (this.invRow) {
         // create three slots: health potion, mana potion, keys
         while (this.invRow.children.length < 3) this.invRow.appendChild(makeInvSlot());
@@ -107,17 +108,6 @@
       if (this.manaPotionSprite) renderSpriteToCanvas(this.manaPotionSprite, mpCanvas, true);
       mpBadge.textContent = String(this.inventory.manaPotion || 0);
 
-      // keys slot
-      const kSlot = slots[2];
-      const kCanvas = kSlot.querySelector('canvas');
-      const kBadge = kSlot.querySelector('.inv-count');
-      if (this.keySprite) renderSpriteToCanvas(this.keySprite, kCanvas, true);
-      else {
-        // draw simple placeholder box
-        const ctx = kCanvas.getContext('2d'); ctx.clearRect(0, 0, kCanvas.width, kCanvas.height);
-        ctx.fillStyle = '#CCCCCC'; ctx.fillRect(6, 6, ICON_SIZE - 12, ICON_SIZE - 12);
-      }
-      kBadge.textContent = String(this.inventory.keys || 0);
     }
   }
 

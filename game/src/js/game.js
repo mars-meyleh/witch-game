@@ -2,7 +2,11 @@ const TILE = 16;
 const WIDTH = 20, HEIGHT = 15; // 320x240
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+// expose canvas context for external managers (enemy manager will use this)
+window.ctx = ctx;
 canvas.width = WIDTH * TILE; canvas.height = HEIGHT * TILE;
+window.TILE = TILE;
+window.WIDTH = WIDTH; window.HEIGHT = HEIGHT;
 
 // Global error overlay to surface runtime errors (helps debugging when game won't load)
 (function () {
@@ -103,7 +107,17 @@ canvas.width = WIDTH * TILE; canvas.height = HEIGHT * TILE;
 
 Input.init();
 const map = generateMap(WIDTH, HEIGHT, 0.18);
-const spriteAPI = new SpriteAPI(ctx, 1);
+// expose map for external managers
+window.gameMap = map;
+
+// Load all sprites at startup
+SpriteLoader.load({
+  WitchSprite: 'src/assets/sprites/witch/witch.png',
+  GolemSprite: 'src/assets/sprites/enemies/golem1.png',
+  wallSprite: 'src/assets/sprites/wall.png',
+  floorSprite: 'src/assets/sprites/floor.png',
+  wattkSprite: 'src/assets/sprites/wattk.png'
+}).catch(err => console.warn('Sprite loading error:', err));
 
 // helper: find a free (non-wall) tile in the map. If preferred provided, try that first.
 function findFreeTile(map, preferred) {
@@ -125,30 +139,18 @@ function findFreeTile(map, preferred) {
 
 // spawn player on a free tile
 const playerSpawn = findFreeTile(map, { x: 2, y: 2 });
-const player = new Player(playerSpawn.x, playerSpawn.y, WitchSprite);
+const player = new Player(playerSpawn.x, playerSpawn.y, window.WitchSprite || null);
+// attach input handlers (mouse + movement/keys) on player
+if (typeof player.initInput === 'function') player.initInput(canvas);
 
 // static golem enemy (placed in the room) with simple patrol between two points; ensure free spawn
 const golemSpawn = findFreeTile(map, { x: 6, y: 6 });
-// central enemy manager
-const enemyManager = new window.EnemyManager();
-// spawn golem via manager (will use pixel sprite or mapped PNGs)
+
+// spawn golem via manager (will use loaded sprite)
 let golem = enemyManager.spawn('golem.basic', golemSpawn.x, golemSpawn.y, { hp: 50, damage: 50, patrolPoints: [{ x: golemSpawn.x, y: golemSpawn.y }, { x: Math.min(WIDTH - 2, golemSpawn.x + 4), y: golemSpawn.y }] });
+// override sprite with loaded image
+if (golem && window.GolemSprite) golem.sprite = window.GolemSprite;
 
-// wire death callback so drops are spawned centrally
-enemyManager.onDeath = function (enemy) {
-  try {
-    const drop = { x: enemy.x, y: enemy.y, type: 'health', spriteName: 'HealthPotionSprite', sprite: window.HealthPotionSprite || null };
-    items.push(drop);
-    if (window.debugLog) window.debugLog(`EnemyManager: dropped ${drop.type} at (${drop.x},${drop.y})`, 'info');
-  } catch (e) { console.error('EnemyManager onDeath failed', e); }
-};
-
-// Debug: check golem and resources
-setTimeout(() => {
-  console.info('Debug: golem instance ->', golem);
-  console.info('Debug: window.golemSprite ->', window.golemSprite ? window.golemSprite.id : null);
-  console.info('Debug: golem image frames loaded ->', !!(window._spriteImagesLoaded && window._spriteImagesLoaded['golem.basic']), (window.getSpriteImages ? window.getSpriteImages('golem.basic') : null) ? window.getSpriteImages('golem.basic').map(i => !!i) : null);
-}, 600);
 
 // items dropped in the level (e.g., potions)
 const items = []; // { x, y, type, sprite }
@@ -157,23 +159,7 @@ const chests = []; // { x,y, opened }
 // active projectiles
 const projectiles = [];
 
-// firing from mouse click (left button). Fires one tile ahead in player's facing direction.
-canvas.addEventListener('mousedown', (ev) => {
-  // left button only
-  if (ev.button !== 0) return;
-  const now = Date.now();
-  if (!window._fireCooldown) window._fireCooldown = 0;
-  if (now - window._fireCooldown < 180) return;
-  window._fireCooldown = now;
-  const dir = player.facing || 'right';
-  const dx = dir === 'left' ? -1 : 1;
-  const sx = player.x + dx, sy = player.y;
-  if (map[sy] && map[sy][sx] === 0) {
-    const sprite = window.wattkSprite || null;
-    const proj = new window.Projectile(sx, sy, dir, sprite, 140, 50);
-    projectiles.push(proj);
-  }
-});
+// player firing moved into `Player` (see player.initInput and player.update)
 
 // spawn a few chests on the map (avoid player/golem positions)
 function placeChests(count = 2) {
@@ -193,43 +179,41 @@ function placeChests(count = 2) {
 placeChests(2);
 
 // start loop immediately; sprite data is embedded (WitchSprite, GrassTile, StoneTile)
-let sprites = { witch: WitchSprite};
+let sprites = { witch: (typeof WitchSprite !== 'undefined') ? WitchSprite : (window.WitchSprite || null) };
 
 // preload chest images (3-frame opening animation)
-SpriteLoader.load([
-  'src/assets/sprites/chest/chest-closed.png',
-  'src/assets/sprites/chest/chest-open1.png',
-  'src/assets/sprites/chest/chest-open2.png'
-]).then(({images}) => {
-  const keys = [
+// simple inline fetch-based image loader (replaces SpriteLoader)
+(async function loadChestImages() {
+  const paths = [
     'src/assets/sprites/chest/chest-closed.png',
     'src/assets/sprites/chest/chest-open1.png',
     'src/assets/sprites/chest/chest-open2.png'
   ];
-  window._chestImages = keys.map(k => images[k] || null);
-  const missing = window._chestImages.map((img, i) => img ? null : keys[i]).filter(Boolean);
-  window._chestImagesLoaded = (missing.length === 0);
-  if (window._chestImagesLoaded) {
-    console.info('Chest images loaded:', keys);
-  } else {
-    console.warn('Chest images missing or failed to load:', missing);
-  }
-});
-
-// load sprite map images (PNG replacements) and register them
-if (window.loadSpriteMap) {
   try {
-    window.loadSpriteMap(window.SpriteMap || {}).then(() => {
-      if (window.debugLog) window.debugLog('SpriteMap loaded', 'info');
-      try { instantiateGolem(); } catch (e) { /* ignore */ }
-    });
-  } catch (e) { /* ignore */ }
-}
+    const images = await Promise.all(paths.map(path =>
+      fetch(path).then(r => r.blob()).then(blob => {
+        const img = new Image();
+        img.src = URL.createObjectURL(blob);
+        return img;
+      }).catch(() => null)
+    ));
+    window._chestImages = images;
+    window._chestImagesLoaded = images.every(img => img !== null && img !== undefined);
+    if (window._chestImagesLoaded) {
+      console.info('Chest images loaded:', window._chestImages.length, 'frames');
+    } else {
+      console.warn('Some chest images failed to load');
+    }
+  } catch (e) {
+    console.warn('Failed to load chest images:', e);
+  }
+})();
+
 
 let lastMove = 0;
 // player stats (HP uses hpPerIcon = 50 by default in HUD)
-let playerHP = 150, playerMaxHP = 150;
-let playerMana = 40, playerMaxMana = 100;
+window.playerHP = 150; window.playerMaxHP = 150;
+window.playerMana = 25; window.playerMaxMana = 75;
 
 // player attributes (base values, can be modified by equipment/weapons)
 let playerAttributes = {
@@ -249,7 +233,7 @@ let playerAttributes = {
 
 // instantiate HUD (outside of canvas)
 const hud = (window.HUD) ? new window.HUD({ hpPerIcon: 50, manaPerIcon: 25 }) : null;
-if (hud) { hud.setHP(playerHP, playerMaxHP); hud.setMana(playerMana, playerMaxMana); }
+if (hud) { hud.setHP(window.playerHP, window.playerMaxHP); hud.setMana(window.playerMana, window.playerMaxMana); }
 // inventory state (health potions, mana potions, keys)
 let inventory = { healthPotion: 2, manaPotion: 2, keys: 0 };
 if (hud) hud.setInventory(inventory);
@@ -278,69 +262,8 @@ function update() {
     else if (Input.isDown('p')) { playerHP = Math.max(0, playerHP - 100); window._testKeyCooldown = now; }
   }
   // inventory use keys: Q = use health potion, E = use mana potion
-  if (!window._invKeyCooldown) window._invKeyCooldown = 0;
-  if (now - window._invKeyCooldown > 180) {
-    if (Input.isDown('q')) {
-      // try to consume from inventory panel first
-      if (window.inventoryPanel && window.inventoryPanel.consumeItemByName && window.inventoryPanel.consumeItemByName('HealthPotionSprite')) {
-        const heal = hud ? hud.hpPerIcon : 50;
-        playerHP = Math.min(playerMaxHP, playerHP + heal);
-        window._invKeyCooldown = now;
-      } else if (inventory.healthPotion > 0) {
-        inventory.healthPotion--;
-        const heal = hud ? hud.hpPerIcon : 50;
-        playerHP = Math.min(playerMaxHP, playerHP + heal);
-        if (hud) hud.setInventory(inventory);
-        window._invKeyCooldown = now;
-      }
-    } else if (Input.isDown('e')) {
-      if (window.inventoryPanel && window.inventoryPanel.consumeItemByName && window.inventoryPanel.consumeItemByName('ManaPotionSprite')) {
-        const mana = hud ? hud.manaPerIcon : 25;
-        playerMana = Math.min(playerMaxMana, playerMana + mana);
-        window._invKeyCooldown = now;
-      } else if (inventory.manaPotion > 0) {
-        inventory.manaPotion--;
-        const mana = hud ? hud.manaPerIcon : 25;
-        playerMana = Math.min(playerMaxMana, playerMana + mana);
-        if (hud) hud.setInventory(inventory);
-        window._invKeyCooldown = now;
-      }
-    }
-  }
-  // simple input rate limit so holding key doesn't spam movement too fast
-  if (now - lastMove > 120) {
-    if (Input.isDown('arrowleft') || Input.isDown('a')) { player.move(-1, 0, map); lastMove = now; }
-    else if (Input.isDown('arrowright') || Input.isDown('d')) { player.move(1, 0, map); lastMove = now; }
-    else if (Input.isDown('arrowup') || Input.isDown('w')) { player.move(0, -1, map); lastMove = now; }
-    else if (Input.isDown('arrowdown') || Input.isDown('s')) { player.move(0, 1, map); lastMove = now; }
-  }
-
-  // enemy touch damage & player attack: F = strike adjacent enemy for 50
-  if (!window._attackCooldown) window._attackCooldown = 0;
-  if (now - window._attackCooldown > 220) {
-    if (Input.isDown('f')) {
-      // find first adjacent alive enemy
-      let attacked = false;
-      if (enemyManager) {
-        for (let en of enemyManager.enemies) {
-          if (!en || !en.alive) continue;
-          const manhattan = Math.abs(player.x - en.x) + Math.abs(player.y - en.y);
-          if (manhattan === 1) { en.takeDamage(50); attacked = true; break; }
-        }
-      }
-      if (attacked) window._attackCooldown = now;
-    }
-  }
-
-  // enemy touch damage - check all enemies
-  if (enemyManager) {
-    for (let en of enemyManager.enemies) {
-      if (!en || !en.alive) continue;
-      if (en.tryTouch(player, now)) {
-        playerHP = Math.max(0, playerHP - en.damage);
-      }
-    }
-  }
+  // delegate player-specific input (movement, attack, potions) to Player
+  if (window.player && typeof window.player.update === 'function') window.player.update(now, map);
 
   // pickup items if player stands on them
   for (let i = items.length - 1; i >= 0; i--) {
@@ -403,14 +326,6 @@ function update() {
     if (!p || !p.alive) { projectiles.splice(i, 1); continue; }
     p.update(now, map);
     if (!p.alive) { projectiles.splice(i, 1); continue; }
-    // check collision with any enemy at projectile location
-    const hit = enemyManager ? enemyManager.findAt(p.x, p.y) : null;
-    if (hit) {
-      hit.takeDamage(p.damage);
-      p.alive = false;
-      projectiles.splice(i, 1);
-      // drops on death are handled centrally by EnemyManager.onDeath
-    }
   }
 }
 
@@ -419,10 +334,10 @@ function draw() {
     for (let x = 0; x < WIDTH; x++) {
       const tx = x * TILE, ty = y * TILE;
       if (map[y][x] === 1) {
-        if (window.wallSprite) spriteAPI.draw(window.wallSprite, tx, ty, false);
+        if (window.wallSprite && window.wallSprite instanceof Image) ctx.drawImage(window.wallSprite, tx, ty, TILE, TILE);
         else { ctx.fillStyle = '#DAB6D8'; ctx.fillRect(tx, ty, TILE, TILE); }
       } else {
-        if (window.floorSprite) spriteAPI.draw(window.floorSprite, tx, ty, false);
+        if (window.floorSprite && window.floorSprite instanceof Image) ctx.drawImage(window.floorSprite, tx, ty, TILE, TILE);
         else { ctx.fillStyle = '#F6E7F2'; ctx.fillRect(tx, ty, TILE, TILE); }
       }
     }
@@ -430,13 +345,13 @@ function draw() {
   // draw & update enemies via EnemyManager
   if (enemyManager) {
     enemyManager.update(Date.now(), map);
-    enemyManager.draw(spriteAPI, TILE);
+    enemyManager.draw(ctx, TILE);
   }
 
   // draw items on ground
   for (let it of items) {
     if (it && !it.sprite && it.spriteName && window[it.spriteName]) it.sprite = window[it.spriteName];
-    if (it && it.sprite) spriteAPI.draw(it.sprite, it.x * TILE, it.y * TILE, false);
+    if (it && it.sprite && it.sprite instanceof Image) ctx.drawImage(it.sprite, it.x * TILE, it.y * TILE, TILE, TILE);
     else {
       // fallback: simple marker
       ctx.fillStyle = '#FF8080'; ctx.fillRect(it.x * TILE + 4, it.y * TILE + 4, TILE - 8, TILE - 8);
@@ -482,12 +397,12 @@ function draw() {
   }
   // draw projectiles
   for (let p of projectiles) {
-    if (p && p.alive) p.draw(spriteAPI, TILE);
+    if (p && p.alive) p.draw(ctx, TILE);
   }
-  // draw player using SpriteAPI; scale is 1 (sprite pixels = canvas pixels), tile size is TILE
-  player.draw(ctx, player.x * TILE, player.y * TILE, TILE, spriteAPI);
+  // draw player; tile size is TILE
+  player.draw(ctx, player.x * TILE, player.y * TILE, TILE);
   // update DOM HUD
-  if (hud) { hud.setHP(playerHP, playerMaxHP); hud.setMana(playerMana, playerMaxMana); }
+  if (hud) { hud.setHP(window.playerHP, window.playerMaxHP); hud.setMana(window.playerMana, window.playerMaxMana); }
 
 
 

@@ -1,7 +1,7 @@
 // Enemy class - simple static enemy for now
 class Enemy {
   // patrolPoints: optional array of {x,y} positions
-  constructor(x, y, sprite, hp = 50, damage = 50, patrolPoints = null) {
+  constructor(x, y, sprite = null, hp = 50, damage = 50, patrolPoints = null) {
     this.x = x;
     this.y = y;
     this.sprite = sprite || null;
@@ -17,12 +17,11 @@ class Enemy {
     this.alive = true;
   }
 
-  draw(spriteAPI, tileSize) {
-    if (!this.sprite || !spriteAPI || !this.alive) return;
+  draw(ctx, tileSize) {
+    if (!this.sprite || !ctx || !this.alive) return;
     const px = this.x * tileSize;
     const py = this.y * tileSize;
-    // delegate drawing to SpriteAPI which will prefer PNGs if mapped
-    spriteAPI.draw(this.sprite, px, py, false);
+    if (this.sprite instanceof Image) ctx.drawImage(this.sprite, px, py, tileSize, tileSize);
   }
 
   // update called from game loop to advance patrol
@@ -48,19 +47,6 @@ class Enemy {
     }
   }
 
-  // adjacency-based hitbox: orthogonal neighbors
-  tryTouch(player, now = Date.now()) {
-    if (!player || !this.alive) return false;
-    const manhattan = Math.abs(player.x - this.x) + Math.abs(player.y - this.y);
-    if (manhattan === 1) {
-      if (now - this._lastHit >= this.hitCooldown) {
-        this._lastHit = now;
-        return true;
-      }
-    }
-    return false;
-  }
-
   takeDamage(amount = 1) {
     if (!this.alive) return;
     this.hp -= amount;
@@ -71,3 +57,98 @@ class Enemy {
 }
 
 window.Enemy = Enemy;
+
+// Simple EnemyManager placed here so all enemy control lives in this file.
+class EnemyManager {
+  constructor() {
+    this.enemies = [];
+    this.map = null;
+    this.tileSize = 16;
+    this._inited = false;
+    this._loop = this._loop.bind(this);
+    // try to initialize (will poll for game globals)
+    this.init();
+  }
+
+  init() {
+    if (this._inited) return;
+    if (!window.gameMap || !window.ctx) {
+      setTimeout(() => this.init(), 200);
+      return;
+    }
+    this.map = window.gameMap;
+    this.tileSize = window.TILE || 16;
+    this._inited = true;
+
+    // spawn a sample golem so levels have enemies by default
+    try {
+      const golemSpawn = (window.findFreeTile) ? window.findFreeTile(this.map, { x: 6, y: 6 }) : { x: 6, y: 6 };
+      this.spawn('golem.basic', golemSpawn.x, golemSpawn.y, { hp: 50, damage: 50, patrolPoints: [{ x: golemSpawn.x, y: golemSpawn.y }, { x: Math.min((window.WIDTH || 20) - 2, golemSpawn.x + 4), y: golemSpawn.y }] });
+    } catch (e) { /* ignore */ }
+
+    requestAnimationFrame(this._loop);
+  }
+
+  spawn(id, x, y, opts = {}) {
+    const sprite = (window.SpriteMap && window.SpriteMap[id]) ? window.SpriteMap[id] : (window[id] || null);
+    const e = new Enemy(x, y, sprite, opts.hp || 50, opts.damage || 50, opts.patrolPoints || null);
+    e.id = id;
+    this.enemies.push(e);
+    return e;
+  }
+
+  findAt(x, y) {
+    return this.enemies.find(e => e && e.alive && e.x === x && e.y === y) || null;
+  }
+
+  update(now = Date.now(), map = null) {
+    if (!this._inited) return;
+    const m = map || this.map;
+    for (let en of this.enemies) {
+      if (!en || !en.alive) continue;
+      en.update(now, m);
+    }
+
+    // handle projectile collisions (projectiles are created by Player and exposed as window.projectiles)
+    if (window.projectiles && window.projectiles.length) {
+      for (let i = window.projectiles.length - 1; i >= 0; i--) {
+        const p = window.projectiles[i];
+        if (!p || !p.alive) continue;
+        const hit = this.findAt(p.x, p.y);
+        if (hit) {
+          hit.takeDamage(p.damage || 0);
+          p.alive = false;
+          window.projectiles.splice(i, 1);
+          if (!hit.alive) this._onDeath(hit);
+        }
+      }
+    }
+
+  }
+
+  draw(ctx = null, tileSize = null) {
+    const c = ctx || window.ctx;
+    const ts = tileSize || this.tileSize;
+    for (let en of this.enemies) {
+      if (!en) continue;
+      en.draw(c, ts);
+    }
+  }
+
+  _loop() {
+    const now = Date.now();
+    this.update(now, this.map);
+    this.draw(window.ctx, this.tileSize);
+    requestAnimationFrame(this._loop);
+  }
+
+  _onDeath(en) {
+    if (!window.items) window.items = [];
+    const isHealth = Math.random() < 0.5;
+    const type = isHealth ? 'health' : 'mana';
+    const spriteName = isHealth ? 'HealthPotionSprite' : 'ManaPotionSprite';
+    window.items.push({ x: en.x, y: en.y, type, spriteName });
+  }
+}
+
+window.enemyManager = new EnemyManager();
