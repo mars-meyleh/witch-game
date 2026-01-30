@@ -52,11 +52,12 @@ window.HEIGHT = GameState.HEIGHT;
       el.textContent = String(msg);
     } catch (e) { console.error('Failed to show error overlay', e); }
   }
-  window.addEventListener('error', (ev) => {
+  import eventManager from './eventManager.js';
+  eventManager.on('error', (ev) => {
     const msg = ev && ev.message ? (ev.message + ' @ ' + ev.filename + ':' + ev.lineno) : String(ev);
     showError(msg);
   });
-  window.addEventListener('unhandledrejection', (ev) => {
+  eventManager.on('unhandledrejection', (ev) => {
     const r = ev && ev.reason ? ev.reason : ev;
     const msg = r && r.message ? ('UnhandledRejection: ' + r.message) : ('UnhandledRejection: ' + String(r));
     showError(msg);
@@ -109,9 +110,11 @@ window.HEIGHT = GameState.HEIGHT;
     else console.log(msg);
   };
 
-  clearBtn.addEventListener('click', () => { content.innerHTML = ''; });
+  clearBtn.addEventListener('click', () => eventManager.emit('debugClear'));
   let visible = true;
-  toggleBtn.addEventListener('click', () => {
+  toggleBtn.addEventListener('click', () => eventManager.emit('debugToggle'));
+  eventManager.on('debugClear', () => { content.innerHTML = ''; });
+  eventManager.on('debugToggle', () => {
     visible = !visible;
     content.style.display = visible ? 'block' : 'none';
     panel.style.height = visible ? '320px' : '28px';

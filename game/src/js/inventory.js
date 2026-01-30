@@ -178,14 +178,14 @@
       this.equipSlots.forEach((s, i) => { attachSlotHandlers(s, 'equip', i); s.wrap.dataset.slotType = 'equip'; s.wrap.dataset.slotIndex = i; });
       this.invSlots.forEach((s, i) => { attachSlotHandlers(s, 'inv', i); s.wrap.dataset.slotType = 'inv'; s.wrap.dataset.slotIndex = i; });
 
-      // global mouse/touch move and up handlers for dragging
-      window.addEventListener('mousemove', (e) => { if (this._drag) this._onDragMove(e.clientX, e.clientY); });
-      window.addEventListener('mouseup', (e) => { if (this._drag) this._endDrag(e.clientX, e.clientY); });
-      window.addEventListener('touchmove', (e) => { if (this._drag) { const t = e.touches[0]; this._onDragMove(t.clientX, t.clientY); } }, { passive: false });
-      window.addEventListener('touchend', (e) => { if (this._drag) { this._endDrag(); } });
+      // global mouse/touch move and up handlers for dragging (centralized)
+      eventManager.on('mousemove', (e) => { if (this._drag) this._onDragMove(e.clientX, e.clientY); });
+      eventManager.on('mouseup', (e) => { if (this._drag) this._endDrag(e.clientX, e.clientY); });
+      eventManager.on('touchmove', (e) => { if (this._drag) { const t = e.touches[0]; this._onDragMove(t.clientX, t.clientY); } });
+      eventManager.on('touchend', (e) => { if (this._drag) { this._endDrag(); } });
 
-      // key toggle
-      document.addEventListener('keydown', (e) => {
+      // key toggle (centralized)
+      eventManager.on('keydown', (e) => {
         if (e.key && e.key.toLowerCase() === 'c') {
           this.toggle();
         }
