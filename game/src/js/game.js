@@ -287,15 +287,12 @@ async function initGame() {
   // expose hud reference so inventory panel can sync counts
   if (hud) window.hud = hud;
 
-  // handler called by the InventoryPanel when its contents change
+  // handler called by the InventoryManager when its contents change
   window._onInventoryPanelChanged = function (counts) {
     if (!counts) return;
-    GameState.inventory.healthPotion = counts.healthPotion || 0;
-    GameState.inventory.manaPotion = counts.manaPotion || 0;
-    GameState.inventory.keys = counts.keys || 0;
-    if (window.hud && typeof window.hud.setInventory === 'function') window.hud.setInventory(GameState.inventory);
+    if (GameState.inventoryManager) GameState.inventoryManager.syncInventory();
   };
-  if (window.inventoryPanel && typeof window.inventoryPanel._emitInventorySync === 'function') window.inventoryPanel._emitInventorySync();
+  if (GameState.inventoryManager) GameState.inventoryManager.syncInventory();
 
   // Define update and draw functions
   window._update = function update() {
@@ -312,34 +309,24 @@ async function initGame() {
       const it = GameState.items[i];
       if (it.x === GameState.player.x && it.y === GameState.player.y && Input.isDown('f')) {
         let added = false;
-        if (window.inventoryPanel && it.spriteName) {
-          try { added = window.inventoryPanel.addItemByName(it.spriteName); } catch (e) { added = false; }
-          if (window.inventoryPanel && window.inventoryPanel.invSlots) {
-            for (let s of window.inventoryPanel.invSlots) {
-              if (s.spriteName === it.spriteName && !s.sprite) s.sprite = window[it.spriteName] || null;
-            }
-          }
+        if (GameState.inventoryManager && it.spriteName) {
+          try { added = GameState.inventoryManager.addItem(it.spriteName); } catch (e) { added = false; }
         }
         if (!added) {
-          if (it.type === 'health') {
-            GameState.inventory.healthPotion = (GameState.inventory.healthPotion || 0) + 1;
-            if (hud) hud.setInventory(GameState.inventory);
-          } else if (it.type === 'mana') {
-            GameState.inventory.manaPotion = (GameState.inventory.manaPotion || 0) + 1;
-            if (hud) hud.setInventory(GameState.inventory);
-          } else if (it.type === 'mushroom' || it.type === 'lunarfruit') {
-            if (window.inventoryPanel && it.spriteName) {
-              window.inventoryPanel.addItemByName(it.spriteName);
-              if (window.inventoryPanel && window.inventoryPanel.invSlots) {
-                for (let s of window.inventoryPanel.invSlots) {
-                  if (s.spriteName === it.spriteName && !s.sprite) s.sprite = window[it.spriteName] || null;
-                }
-              }
+          if (GameState.inventoryManager) {
+            if (it.type === 'health') {
+              GameState.inventoryManager.inventory.healthPotion = (GameState.inventoryManager.inventory.healthPotion || 0) + 1;
+              if (hud) hud.setInventory(GameState.inventoryManager.inventory);
+            } else if (it.type === 'mana') {
+              GameState.inventoryManager.inventory.manaPotion = (GameState.inventoryManager.inventory.manaPotion || 0) + 1;
+              if (hud) hud.setInventory(GameState.inventoryManager.inventory);
+            } else if (it.type === 'mushroom' || it.type === 'lunarfruit') {
+              GameState.inventoryManager.addItem(it.spriteName);
+            } else if (it.type === 'hat' || it.type === 'corset' || it.type === 'dress') {
+              if (!GameState.inventoryManager.inventory.equipment) GameState.inventoryManager.inventory.equipment = [];
+              GameState.inventoryManager.inventory.equipment.push({ type: it.type, name: it.name, spriteName: it.spriteName, equipped: false });
+              if (hud) hud.setInventory(GameState.inventoryManager.inventory);
             }
-          } else if (it.type === 'hat' || it.type === 'corset' || it.type === 'dress') {
-            if (!GameState.inventory.equipment) GameState.inventory.equipment = [];
-            GameState.inventory.equipment.push({ type: it.type, name: it.name, spriteName: it.spriteName, equipped: false });
-            if (hud) hud.setInventory(GameState.inventory);
           }
         }
         if (window.inventoryPanel && typeof window.inventoryPanel.render === 'function') {
